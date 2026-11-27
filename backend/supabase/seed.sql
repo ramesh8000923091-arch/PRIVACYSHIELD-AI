@@ -1,0 +1,3 @@
+-- PrivacyShield AI — Optional Seed File
+-- Intentionally left empty of any personal or document data.
+-- Database migrations (Phase 9) define strictly non-sensitive metadata tables with RLS enabled.

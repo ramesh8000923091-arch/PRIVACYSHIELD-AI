@@ -1,0 +1,120 @@
+/* PrivacyShield AI — Reusable Design Tokens
+ * Dark-first enterprise cybersecurity palette + crisp high-contrast light theme.
+ * All semantic PII category tokens meet WCAG AA contrast requirements.
+ */
+
+:root {
+  /* Typography */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Radius Scale */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  /* Light Mode Surfaces */
+  --bg-canvas: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f1f5f9;
+  --bg-subtle: #e2e8f0;
+  --border-default: #cbd5e1;
+  --border-subtle: #e2e8f0;
+
+  /* Light Mode Typography */
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+
+  /* Brand & Status Accents */
+  --brand-primary: #2563eb;
+  --brand-primary-hover: #1d4ed8;
+  --brand-secondary: #7c3aed;
+  --status-verified: #059669;
+  --status-warning: #d97706;
+  --status-danger: #dc2626;
+
+  /* Semantic PII Category Tokens (Light Mode) */
+  --pii-email-fg: #1d4ed8;
+  --pii-email-bg: rgba(37, 99, 235, 0.12);
+  --pii-email-border: rgba(37, 99, 235, 0.35);
+
+  --pii-phone-fg: #7e22ce;
+  --pii-phone-bg: rgba(147, 51, 234, 0.12);
+  --pii-phone-border: rgba(147, 51, 234, 0.35);
+
+  --pii-ip-fg: #0e7490;
+  --pii-ip-bg: rgba(6, 182, 212, 0.14);
+  --pii-ip-border: rgba(6, 182, 212, 0.4);
+
+  --pii-pan-fg: #c2410c;
+  --pii-pan-bg: rgba(249, 115, 22, 0.14);
+  --pii-pan-border: rgba(249, 115, 22, 0.4);
+
+  --pii-aadhaar-fg: #be185d;
+  --pii-aadhaar-bg: rgba(236, 72, 153, 0.12);
+  --pii-aadhaar-border: rgba(236, 72, 153, 0.38);
+
+  --pii-card-fg: #b91c1c;
+  --pii-card-bg: rgba(239, 68, 68, 0.12);
+  --pii-card-border: rgba(239, 68, 68, 0.38);
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 6px 20px -4px rgba(15, 23, 42, 0.1);
+  --shadow-glow-blue: 0 0 28px rgba(37, 99, 235, 0.16);
+}
+
+.dark {
+  /* Dark Mode Surfaces (Cybersecurity Navy / Obsidian) */
+  --bg-canvas: #060913;
+  --bg-surface: #0c1222;
+  --bg-elevated: #131c33;
+  --bg-subtle: #1b2640;
+  --border-default: #1e293b;
+  --border-subtle: #162033;
+
+  /* Dark Mode Typography */
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+
+  /* Brand & Status Accents */
+  --brand-primary: #3b82f6;
+  --brand-primary-hover: #60a5fa;
+  --brand-secondary: #8b5cf6;
+  --status-verified: #10b981;
+  --status-warning: #f59e0b;
+  --status-danger: #ef4444;
+
+  /* Semantic PII Category Tokens (Dark Mode) */
+  --pii-email-fg: #93c5fd;
+  --pii-email-bg: rgba(59, 130, 246, 0.18);
+  --pii-email-border: rgba(96, 165, 250, 0.45);
+
+  --pii-phone-fg: #d8b4fe;
+  --pii-phone-bg: rgba(168, 85, 247, 0.18);
+  --pii-phone-border: rgba(192, 132, 252, 0.45);
+
+  --pii-ip-fg: #67e8f9;
+  --pii-ip-bg: rgba(6, 182, 212, 0.18);
+  --pii-ip-border: rgba(34, 211, 238, 0.45);
+
+  --pii-pan-fg: #fdba74;
+  --pii-pan-bg: rgba(249, 115, 22, 0.18);
+  --pii-pan-border: rgba(251, 146, 60, 0.45);
+
+  --pii-aadhaar-fg: #f9a8d4;
+  --pii-aadhaar-bg: rgba(236, 72, 153, 0.18);
+  --pii-aadhaar-border: rgba(244, 114, 182, 0.45);
+
+  --pii-card-fg: #fca5a5;
+  --pii-card-bg: rgba(239, 68, 68, 0.2);
+  --pii-card-border: rgba(248, 113, 113, 0.5);
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 10px 30px -8px rgba(0, 0, 0, 0.55);
+  --shadow-glow-blue: 0 0 36px rgba(59, 130, 246, 0.24);
+}

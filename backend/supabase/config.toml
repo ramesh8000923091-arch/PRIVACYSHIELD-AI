@@ -1,0 +1,22 @@
+# Supabase Local Configuration — PrivacyShield AI
+# Strictly for optional non-sensitive metadata (user_preferences, aggregate sanitization_statistics).
+# NEVER configure endpoints or tables that store raw documents, PII values, or pseudonym mappings.
+
+project_id = "privacyshield-ai"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173"]
+enable_signup = true
