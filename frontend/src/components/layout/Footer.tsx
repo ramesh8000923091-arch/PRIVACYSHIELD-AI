@@ -32,10 +32,10 @@ export function Footer() {
             </div>
           </div>
 
-          <div className="space-y-3">
-            <h3 className="font-mono text-xs font-semibold uppercase tracking-wider text-text-primary">
+          <nav aria-label="Platform links" className="space-y-3">
+            <h2 className="font-mono text-xs font-semibold uppercase tracking-wider text-text-primary">
               Platform
-            </h3>
+            </h2>
             <ul className="space-y-2 text-sm text-text-muted">
               <li>
                 <Link to="/workspace" className="transition-colors hover:text-text-primary">
@@ -58,12 +58,12 @@ export function Footer() {
                 </Link>
               </li>
             </ul>
-          </div>
+          </nav>
 
-          <div className="space-y-3">
-            <h3 className="font-mono text-xs font-semibold uppercase tracking-wider text-text-primary">
+          <nav aria-label="Architecture links" className="space-y-3">
+            <h2 className="font-mono text-xs font-semibold uppercase tracking-wider text-text-primary">
               Architecture
-            </h3>
+            </h2>
             <ul className="space-y-2 text-sm text-text-muted">
               <li>
                 <Link to="/#how-it-works" className="transition-colors hover:text-text-primary">
@@ -86,7 +86,7 @@ export function Footer() {
                 </Link>
               </li>
             </ul>
-          </div>
+          </nav>
         </div>
 
         <div className="mt-10 flex flex-col items-start justify-between gap-3 border-t border-border-subtle pt-6 text-xs text-text-muted sm:flex-row sm:items-center">

@@ -394,7 +394,7 @@ export function HomePage() {
                           <span>Synthetic:</span>
                           <span className="truncate">{sample.before}</span>
                         </div>
-                        <div className="mt-1 flex items-center justify-between gap-2 text-status-verified">
+                        <div className="mt-1 flex items-center justify-between gap-2 text-emerald-800 dark:text-emerald-300">
                           <span>Partial:</span>
                           <span className="truncate font-semibold">{sample.after}</span>
                         </div>
@@ -479,7 +479,7 @@ export function HomePage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
             <div>
-              <span className="font-mono text-xs font-semibold uppercase tracking-widest text-brand-primary dark:text-blue-400">
+              <span className="font-mono text-xs font-semibold uppercase tracking-widest text-blue-700 dark:text-blue-400">
                 Transparent Application Telemetry
               </span>
               <h2 className="mt-1 text-2xl font-bold tracking-tight text-text-primary">

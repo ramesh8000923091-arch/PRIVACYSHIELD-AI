@@ -2,6 +2,10 @@ import type { PIIType } from './detection';
 
 export type RedactionMode = 'FULL_MASK' | 'PARTIAL_MASK' | 'PSEUDONYMIZE';
 
+export function isRedactionMode(value: string): value is RedactionMode {
+  return value === 'FULL_MASK' || value === 'PARTIAL_MASK' || value === 'PSEUDONYMIZE';
+}
+
 export type FullMaskVariant = 'CATEGORY_TAG' | 'GENERIC';
 
 export interface RedactionConfig {

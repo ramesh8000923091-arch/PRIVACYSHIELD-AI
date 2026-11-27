@@ -26,6 +26,10 @@ export function Navbar() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname, location.hash]);
+
+  useEffect(() => {
     if (!mobileMenuOpen) return;
     function handleEscape(e: KeyboardEvent) {
       if (e.key === 'Escape') {
@@ -161,16 +165,28 @@ export function Navbar() {
           className="border-t border-border-default bg-bg-surface px-4 pb-5 pt-3 lg:hidden"
         >
           <nav aria-label="Mobile navigation" className="flex flex-col gap-1">
-            {LANDING_LINKS.map((item) => (
-              <button
-                key={item.label}
-                type="button"
-                onClick={() => handleNavClick(item)}
-                className="rounded-lg px-3 py-2.5 text-left text-sm font-medium text-text-secondary transition-colors hover:bg-bg-elevated hover:text-text-primary cursor-pointer"
-              >
-                {item.label}
-              </button>
-            ))}
+            {LANDING_LINKS.map((item) => {
+              const isActive =
+                item.to === '/'
+                  ? location.pathname === '/' && !location.hash
+                  : location.pathname === '/' && location.hash === `#${item.sectionId}`;
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  aria-current={isActive ? 'page' : undefined}
+                  onClick={() => handleNavClick(item)}
+                  className={cn(
+                    'rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors cursor-pointer',
+                    isActive
+                      ? 'bg-brand-primary/15 text-blue-700 dark:text-blue-300'
+                      : 'text-text-secondary hover:bg-bg-elevated hover:text-text-primary'
+                  )}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
             <Link
               to="/history"
               aria-current={location.pathname === '/history' ? 'page' : undefined}

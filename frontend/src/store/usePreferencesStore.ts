@@ -14,7 +14,6 @@ interface PreferencesState {
   retainMappingsAcrossDocuments: boolean;
   /** Explicit opt-in for anonymous aggregate statistics when Supabase is configured. Disabled by default. */
   telemetryConsent: boolean;
-  hasCompletedWalkthrough: boolean;
   setTheme: (theme: ThemeMode) => void;
   toggleTheme: () => void;
   setDefaultRedactionMode: (mode: RedactionMode) => void;
@@ -23,7 +22,6 @@ interface PreferencesState {
   setAllCategories: (enabled: boolean) => void;
   setRetainMappingsAcrossDocuments: (retain: boolean) => void;
   setTelemetryConsent: (consent: boolean) => void;
-  setWalkthroughCompleted: (completed: boolean) => void;
   resetPreferences: () => void;
 }
 
@@ -34,7 +32,6 @@ const INITIAL_PREFERENCES = {
   enabledCategories: { ...DEFAULT_ENABLED_CATEGORIES },
   retainMappingsAcrossDocuments: false,
   telemetryConsent: false,
-  hasCompletedWalkthrough: false,
 };
 
 /**
@@ -70,7 +67,6 @@ export const usePreferencesStore = create<PreferencesState>()(
       setRetainMappingsAcrossDocuments: (retainMappingsAcrossDocuments) =>
         set({ retainMappingsAcrossDocuments }),
       setTelemetryConsent: (telemetryConsent) => set({ telemetryConsent }),
-      setWalkthroughCompleted: (hasCompletedWalkthrough) => set({ hasCompletedWalkthrough }),
       resetPreferences: () =>
         set({
           ...INITIAL_PREFERENCES,

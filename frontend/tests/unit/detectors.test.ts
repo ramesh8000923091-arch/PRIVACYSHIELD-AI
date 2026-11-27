@@ -256,4 +256,49 @@ describe('Phase 5 — Modular PII Detection Engine', () => {
       expect(summary.entities.every((e) => e.type === 'EMAIL')).toBe(true);
     });
   });
+
+  describe('Comprehensive Edge Cases, Category Toggles & Unusual Inputs', () => {
+    it('enforces email local/domain RFC length and label bounds', () => {
+      const valid64Local = `${'a'.repeat(64)}@example.com`;
+      const invalid65Local = `${'a'.repeat(65)}@example.com`;
+      const invalidHyphenDomain = 'user@-bad.example.com user@bad-.example.com';
+      expect(detectEmails(valid64Local).map((e) => e.value)).toEqual([valid64Local]);
+      expect(detectEmails(invalid65Local)).toHaveLength(0);
+      expect(detectEmails(invalidHyphenDomain)).toHaveLength(0);
+    });
+
+    it('validates all 10 PAN entity status codes and rejects invalid length/padding', () => {
+      const codes = ['A', 'B', 'C', 'F', 'G', 'H', 'J', 'L', 'P', 'T'];
+      for (const code of codes) {
+        expect(isValidPanStructure(`ABC${code}K1234F`)).toBe(true);
+      }
+      expect(isValidPanStructure('ABCZK1234F')).toBe(false);
+      expect(isValidPanStructure('ABCPK123F')).toBe(false);
+    });
+
+    it('validates 13-digit, 15-digit Amex, 16-digit, and 19-digit Luhn cards while rejecting mixed separators', () => {
+      const text =
+        'Amex 378282246310005, Visa16 4111-1111-1111-1111, Mixed 4111 1111-1111-1111, TooShort 411111111111, TooLong 41111111111111111111';
+      const found = detectCreditCards(text);
+      expect(found.map((e) => e.value)).toEqual(['378282246310005', '4111-1111-1111-1111']);
+    });
+
+    it('respects per-category enabledCategories toggles and handles unusual Unicode/emoji/whitespace inputs', () => {
+      const unusual =
+        '   \n\t 🔐 नमस्ते — priya.sharma@example.com | +91 9876543210 | 192.168.1.1 | ABCPK1234F   ';
+      const onlyEmail = detectPII(unusual, {
+        enabledCategories: {
+          EMAIL: true,
+          PHONE: false,
+          IP_ADDRESS: false,
+          PAN: false,
+          AADHAAR: false,
+          CREDIT_CARD: false,
+        },
+      });
+      expect(onlyEmail.totalDetected).toBe(1);
+      expect(onlyEmail.entities[0].type).toBe('EMAIL');
+      expect(detectPII('   \n\t\r   ').totalDetected).toBe(0);
+    });
+  });
 });

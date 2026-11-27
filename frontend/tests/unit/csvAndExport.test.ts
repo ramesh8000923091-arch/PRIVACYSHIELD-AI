@@ -287,4 +287,73 @@ describe('Phase 8 — CSV Cell Sanitization, File Validation & Safe Export', () 
     revokeSpy.mockRestore();
     clickSpy.mockRestore();
   });
+
+  it('handles malformed CSV quotes cleanly with warnings and detects pipe-delimited CSV', () => {
+    const malformed = 'id,email,notes\n1,priya@example.com,"unclosed quote\n2,ok@example.org,fine';
+    const parsed = parseCsvContent(malformed, 'broken.csv', malformed.length);
+    expect(parsed.warnings.length).toBeGreaterThan(0);
+
+    const pipeCsv = 'id|email\n1|priya@example.com\n2|arjun@example.org\n';
+    const pipeParsed = parseCsvContent(pipeCsv, 'pipe.csv', pipeCsv.length);
+    expect(pipeParsed.document.delimiter).toBe('|');
+    const pipeOut = sanitizeCsvDocument(
+      pipeParsed.document,
+      { enabledCategories: DEFAULT_ENABLED_CATEGORIES },
+      { mode: 'FULL_MASK', fullMaskVariant: 'CATEGORY_TAG', excludedEntityIds: new Set() }
+    );
+    expect(pipeOut.sanitizedCsvText).toContain('1|[REDACTED_EMAIL]');
+  });
+
+  it('neutralizes all spreadsheet formula triggers (=, +, -, @, TAB, CR) while keeping negative numbers', () => {
+    const triggers = [
+      'id,formula,neg',
+      '1,=1+1,-99.95',
+      '2,+SUM(A1:A2),-0.5',
+      '3,-cmd|calc,-42',
+      '4,@SUM(1;2),10',
+      '5,"\t=1+1",20',
+    ].join('\n');
+    const { document: csvDoc } = parseCsvContent(triggers, 'triggers.csv', triggers.length);
+    const out = sanitizeCsvDocument(
+      csvDoc,
+      { enabledCategories: DEFAULT_ENABLED_CATEGORIES },
+      { mode: 'FULL_MASK', fullMaskVariant: 'CATEGORY_TAG', excludedEntityIds: new Set() }
+    );
+    const reparsed = parseCsvContent(out.sanitizedCsvText, 'safe.csv', out.sanitizedCsvText.length);
+    expect(reparsed.document.rows[1][1]).toBe("'=1+1");
+    expect(reparsed.document.rows[1][2]).toBe('-99.95');
+    expect(reparsed.document.rows[2][1]).toBe("'+SUM(A1:A2)");
+    expect(reparsed.document.rows[3][1]).toBe("'-cmd|calc");
+    expect(reparsed.document.rows[4][1]).toBe("'@SUM(1;2)");
+    expect(reparsed.document.rows[5][1]).toBe("'\t=1+1");
+  });
+
+  it('rejects ZIP/ELF/JPEG disguised binaries, control bytes, invalid UTF-8, and bad MIME types', async () => {
+    const fakeZip = new File([new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14])], 'archive.csv', {
+      type: 'text/csv',
+    });
+    const fakeElf = new File([new Uint8Array([0x7f, 0x45, 0x4c, 0x46, 0x02])], 'bin.txt', {
+      type: 'text/plain',
+    });
+    const fakeJpg = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], 'photo.txt', {
+      type: 'text/plain',
+    });
+    const controlChars = new File([new Uint8Array([0x41, 0x07, 0x42])], 'bell.txt', {
+      type: 'text/plain',
+    });
+    const badUtf8 = new File([new Uint8Array([0x80, 0xff, 0xfe])], 'badutf8.txt', {
+      type: 'text/plain',
+    });
+    const badMime = new File(['hello'], 'notes.txt', { type: 'application/pdf' });
+
+    expect((await validateUtf8TextBytes(fakeZip)).valid).toBe(false);
+    expect((await validateUtf8TextBytes(fakeElf)).valid).toBe(false);
+    expect((await validateUtf8TextBytes(fakeJpg)).valid).toBe(false);
+    expect((await validateUtf8TextBytes(controlChars)).valid).toBe(false);
+    expect((await validateUtf8TextBytes(badUtf8)).valid).toBe(false);
+    expect(validateUploadedFile(badMime).valid).toBe(false);
+    expect(buildSanitizedFileName('txt', '../../etc/passwd.txt')).toBe(
+      '.._.._etc_passwd-sanitized.txt'
+    );
+  });
 });

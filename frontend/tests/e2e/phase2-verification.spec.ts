@@ -39,7 +39,7 @@ test.describe('Phase 2 — Browser, Route, Theme, Responsive & Privacy Verificat
     // 1. Home route
     await page.goto('/');
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Your Data. Your Privacy.');
-    await expect(page.getByText('100% Client-Side Processing').first()).toBeVisible();
+    await expect(page.locator('main').getByText('100% Client-Side Processing')).toBeVisible();
     await expect(page.getByText(/Local-Only Mode/i).first()).toBeVisible();
 
     // 2. Workspace route

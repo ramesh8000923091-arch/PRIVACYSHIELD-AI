@@ -8,11 +8,13 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default: 'border-border-default bg-bg-elevated text-text-secondary',
-        verified: 'border-status-verified/40 bg-status-verified/15 text-status-verified',
-        primary: 'border-brand-primary/40 bg-brand-primary/15 text-brand-primary',
-        secondary: 'border-brand-secondary/40 bg-brand-secondary/15 text-brand-secondary',
-        warning: 'border-status-warning/40 bg-status-warning/15 text-status-warning',
-        danger: 'border-status-danger/40 bg-status-danger/15 text-status-danger',
+        verified:
+          'border-status-verified/40 bg-status-verified/15 text-emerald-800 dark:text-emerald-300',
+        primary: 'border-brand-primary/40 bg-brand-primary/15 text-blue-700 dark:text-blue-300',
+        secondary:
+          'border-brand-secondary/40 bg-brand-secondary/15 text-violet-700 dark:text-violet-300',
+        warning: 'border-status-warning/40 bg-status-warning/15 text-amber-800 dark:text-amber-300',
+        danger: 'border-status-danger/40 bg-status-danger/15 text-red-700 dark:text-red-300',
       },
     },
     defaultVariants: {

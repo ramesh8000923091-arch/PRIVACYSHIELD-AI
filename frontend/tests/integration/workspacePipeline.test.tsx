@@ -155,4 +155,63 @@ describe('Phase 10 — Workspace End-to-End Integration Pipeline', () => {
       expect(pane).toHaveTextContent('USER_01');
     });
   });
+
+  it('handles malformed CSV warning recovery, TXT upload, category toggles, and Escape focus management', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/workspace']}>
+        <AppRoutes />
+      </MemoryRouter>
+    );
+
+    // 1. Upload TXT file -> verify detection & sanitization
+    await user.click(screen.getByRole('tab', { name: /Upload File/i }));
+    const txtFile = new File(['Contact priya.sharma@example.com and PAN ABCPK1234F'], 'notes.txt', {
+      type: 'text/plain',
+    });
+    await user.upload(screen.getByTestId('file-upload-input'), txtFile);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('analytics-total-detected')).toHaveTextContent('2');
+    });
+
+    // 2. Toggle off EMAIL category -> only PAN remains detected
+    await user.click(screen.getByRole('button', { name: /Email/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId('analytics-total-detected')).toHaveTextContent('1');
+    });
+    expect(screen.getByTestId('diff-sanitized-pane')).toHaveTextContent('priya.sharma@example.com');
+    expect(screen.getByTestId('diff-sanitized-pane')).toHaveTextContent('[REDACTED_PAN]');
+
+    // Re-enable EMAIL
+    await user.click(screen.getByRole('button', { name: /Email/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId('analytics-total-detected')).toHaveTextContent('2');
+    });
+
+    // 3. Test Escape closes HighlightedTextView inspector and restores focus
+    const highlightedPan = screen.getByRole('button', { name: 'ABCPK1234F' });
+    await user.click(highlightedPan);
+    expect(screen.getByRole('region', { name: /Selected entity inspector/i })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(
+      screen.queryByRole('region', { name: /Selected entity inspector/i })
+    ).not.toBeInTheDocument();
+    expect(highlightedPan).toHaveFocus();
+
+    // 4. Upload malformed CSV -> warning alert shown, yet valid sanitization continues
+    const brokenCsv = new File(
+      ['id,email,notes\n1,priya@example.com,"unclosed quote\n2,arjun@example.org,ok'],
+      'malformed.csv',
+      { type: 'text/csv' }
+    );
+    await user.upload(screen.getByTestId('file-upload-input'), brokenCsv);
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/CSV syntax warning/i);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('analytics-total-detected')).toHaveTextContent('2');
+    });
+    expect(screen.getByRole('button', { name: /Download \.CSV/i })).toBeEnabled();
+  });
 });

@@ -26,7 +26,7 @@ export function SectionHeader({
         className
       )}
     >
-      <span className="inline-flex items-center gap-2 font-mono text-xs font-semibold uppercase tracking-widest text-brand-primary">
+      <span className="inline-flex items-center gap-2 font-mono text-xs font-semibold uppercase tracking-widest text-blue-700 dark:text-blue-400">
         <span className="h-1.5 w-1.5 rounded-full bg-brand-primary" aria-hidden="true" />
         {eyebrow}
       </span>

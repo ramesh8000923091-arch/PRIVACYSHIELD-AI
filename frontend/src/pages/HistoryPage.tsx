@@ -143,7 +143,7 @@ export function HistoryPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
+          <CardTitle as="h2" className="flex items-center gap-2 text-base">
             <Activity className="h-4 w-4 text-brand-primary" aria-hidden="true" />
             Recorded Events ({filtered.length})
           </CardTitle>

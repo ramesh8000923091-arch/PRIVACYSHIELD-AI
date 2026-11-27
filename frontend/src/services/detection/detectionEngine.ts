@@ -86,15 +86,18 @@ export function detectPII(text: string, options?: DetectionOptions): DetectionSu
 }
 
 /**
- * Synchronous cell-by-cell CSV PII detection.
+ * Synchronous cell-by-cell CSV PII detection with optional progress callback
+ * (shared between the main thread and the isolated detection Web Worker).
  */
 export function detectCsvCells(
   rows: readonly (readonly string[])[],
   headers: readonly string[],
-  options?: DetectionOptions
+  options?: DetectionOptions,
+  onProgress?: (percent: number) => void
 ): DetectionSummary {
   const startedAt = performance.now();
   const allEntities: DetectedEntity[] = [];
+  const totalRows = Math.max(1, rows.length);
 
   for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
     const row = rows[rowIndex];
@@ -113,6 +116,11 @@ export function detectCsvCells(
           },
         });
       }
+    }
+
+    if (onProgress && rowIndex > 0 && rowIndex % 100 === 0) {
+      const pct = Math.min(92, Math.round(20 + (rowIndex / totalRows) * 72));
+      onProgress(pct);
     }
   }
 

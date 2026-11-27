@@ -84,6 +84,30 @@ async function readBlobAsUint8Array(blob: Blob): Promise<Uint8Array> {
 }
 
 /**
+ * Reads a File as UTF-8 text using File.text() with a FileReader fallback for older runtimes/jsdom.
+ */
+export async function readFileAsUtf8Text(file: File): Promise<string> {
+  if (typeof file.text === 'function') {
+    return file.text();
+  }
+  if (typeof FileReader !== 'undefined') {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          resolve(reader.result);
+        } else {
+          reject(new Error('Unexpected FileReader text result'));
+        }
+      };
+      reader.onerror = () => reject(reader.error ?? new Error('Unable to read file text'));
+      reader.readAsText(file, 'utf-8');
+    });
+  }
+  return new Response(file).text();
+}
+
+/**
  * Inspects a leading byte slice (up to 8 KB) to reject disguised binaries and invalid UTF-8
  * before decoding the full file into memory.
  */

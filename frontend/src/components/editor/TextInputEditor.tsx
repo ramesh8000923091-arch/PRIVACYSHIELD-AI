@@ -181,7 +181,7 @@ export function TextInputEditor({
           <span data-testid="editor-char-count">{charCount.toLocaleString()} chars</span>
           <span data-testid="editor-word-count">{wordCount.toLocaleString()} words</span>
         </div>
-        <span className="font-mono text-[11px] text-status-verified">
+        <span className="font-mono text-[11px] text-emerald-800 dark:text-emerald-300">
           Auto-scans in volatile RAM • Never persisted
         </span>
       </div>

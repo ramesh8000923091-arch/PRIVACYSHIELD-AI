@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, renderHook, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
+import { useToast } from '@/hooks';
 import { runPrivacyVerification } from '@/services/privacy';
 import { submitConsentedAggregateStats } from '@/services/supabase';
 import { useAuditLogStore, usePreferencesStore, useWorkspaceStore } from '@/store';
@@ -159,5 +160,57 @@ describe('Stores, ErrorBoundary & Negative Privacy Verification Audit', () => {
     const localOnly = await submitConsentedAggregateStats(analytics, 'FULL_MASK', true);
     expect(localOnly.synced).toBe(false);
     expect(localOnly.reason).toBe('local-only-mode');
+  });
+
+  it('manages useToast show, auto-dismiss, and manual dismiss cleanly', () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useToast(1500));
+
+    expect(result.current.toast).toBeNull();
+    act(() => {
+      result.current.showToast('Saved locally', 'info');
+    });
+    expect(result.current.toast?.text).toBe('Saved locally');
+    expect(result.current.toast?.tone).toBe('info');
+
+    act(() => {
+      vi.advanceTimersByTime(1500);
+    });
+    expect(result.current.toast).toBeNull();
+
+    act(() => {
+      result.current.showToast('Error alert', 'error');
+    });
+    act(() => {
+      result.current.dismissToast();
+    });
+    expect(result.current.toast).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('toggles individual and bulk PII categories in usePreferencesStore and resets cleanly', () => {
+    const store = usePreferencesStore.getState();
+    store.setAllCategories(false);
+    expect(Object.values(usePreferencesStore.getState().enabledCategories)).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
+
+    store.toggleCategory('EMAIL');
+    expect(usePreferencesStore.getState().enabledCategories.EMAIL).toBe(true);
+
+    store.resetPreferences();
+    expect(Object.values(usePreferencesStore.getState().enabledCategories)).toEqual([
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+    ]);
   });
 });

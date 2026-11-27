@@ -13,16 +13,14 @@ import type {
 } from '@/types';
 import {
   containsBinaryNullBytes,
+  readFileAsUtf8Text,
   validateUploadedFile,
   validateUtf8TextBytes,
 } from '@/utils/fileValidation';
 import { countWords } from '@/utils/formatters';
+import { useToast, type ToastMessage } from './useToast';
 
-export interface ToastMessage {
-  id: number;
-  text: string;
-  tone: 'success' | 'info' | 'error';
-}
+export type { ToastMessage };
 
 /**
  * Volatile RAM-only singleton mapper kept in JS memory (never persisted to storage).
@@ -38,12 +36,11 @@ export function resetVolatileSessionMapper(): void {
 export function useSanitizationPipeline() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const debounceTimerRef = useRef<number | null>(null);
-  const toastTimerRef = useRef<number | null>(null);
   const uploadSeqRef = useRef(0);
   const lastAuditedTextRef = useRef<string>('');
 
+  const { toast, showToast, dismissToast } = useToast();
   const [scanNonce, setScanNonce] = useState(0);
-  const [toast, setToast] = useState<ToastMessage | null>(null);
   const [sanitizedCsvRows, setSanitizedCsvRows] = useState<string[][]>([]);
   const [redactedCellKeys, setRedactedCellKeys] = useState<Set<string>>(new Set());
   const [excludedCellKeys, setExcludedCellKeys] = useState<Set<string>>(new Set());
@@ -72,7 +69,6 @@ export function useSanitizationPipeline() {
 
   const setRawText = useWorkspaceStore((s) => s.setRawText);
   const setDocumentWithFile = useWorkspaceStore((s) => s.setDocumentWithFile);
-  const setUploadedFile = useWorkspaceStore((s) => s.setUploadedFile);
   const setDetectionResults = useWorkspaceStore((s) => s.setDetectionResults);
   const setRedactionOutput = useWorkspaceStore((s) => s.setRedactionOutput);
   const setRedactionMode = useWorkspaceStore((s) => s.setRedactionMode);
@@ -87,9 +83,6 @@ export function useSanitizationPipeline() {
 
   useEffect(() => {
     return () => {
-      if (toastTimerRef.current !== null) {
-        window.clearTimeout(toastTimerRef.current);
-      }
       if (debounceTimerRef.current !== null) {
         window.clearTimeout(debounceTimerRef.current);
       }
@@ -104,26 +97,6 @@ export function useSanitizationPipeline() {
       setMappingCount(0);
     }
   }, [retainMappingsAcrossDocuments]);
-
-  const dismissToast = useCallback(() => {
-    if (toastTimerRef.current !== null) {
-      window.clearTimeout(toastTimerRef.current);
-      toastTimerRef.current = null;
-    }
-    setToast(null);
-  }, []);
-
-  const showToast = useCallback((text: string, tone: ToastMessage['tone'] = 'success') => {
-    if (toastTimerRef.current !== null) {
-      window.clearTimeout(toastTimerRef.current);
-    }
-    const id = Date.now();
-    setToast({ id, text, tone });
-    toastTimerRef.current = window.setTimeout(() => {
-      setToast((current) => (current?.id === id ? null : current));
-      toastTimerRef.current = null;
-    }, 3500);
-  }, []);
 
   // Effect 1: Detection (sync for small inputs, isolated Web Worker for >= 50KB or > 500 CSV rows)
   useEffect(() => {
@@ -407,7 +380,7 @@ export function useSanitizationPipeline() {
           return;
         }
 
-        const text = await file.text();
+        const text = await readFileAsUtf8Text(file);
         if (currentSeq !== uploadSeqRef.current) return;
 
         if (containsBinaryNullBytes(text)) {
@@ -579,7 +552,6 @@ export function useSanitizationPipeline() {
     mappingCount,
     toast,
     setRawText,
-    setUploadedFile,
     setErrorMessage,
     setFullMaskVariant,
     toggleEntityExclusion,

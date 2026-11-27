@@ -88,7 +88,7 @@ export function SideBySideDiffView({
           <Columns2 className="h-5 w-5" aria-hidden="true" />
         </div>
         <div className="space-y-1">
-          <h3 className="text-sm font-semibold text-text-primary">Side-by-Side Comparison Ready</h3>
+          <h2 className="text-sm font-semibold text-text-primary">Side-by-Side Comparison Ready</h2>
           <p className="max-w-md text-xs text-text-muted">
             Paste text, upload a .txt or .csv file, or click Load Sample Data above to inspect
             original vs. sanitized output side by side.
@@ -111,7 +111,7 @@ export function SideBySideDiffView({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-default bg-bg-elevated/60 px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
           <Columns2 className="h-4 w-4 text-brand-primary dark:text-blue-400" aria-hidden="true" />
-          <h3 className="text-sm font-semibold text-text-primary">Side-by-Side Comparison</h3>
+          <h2 className="text-sm font-semibold text-text-primary">Side-by-Side Comparison</h2>
           <Badge variant="verified" className="font-mono text-[11px]">
             {redactedCount} redacted
           </Badge>
@@ -168,6 +168,7 @@ export function SideBySideDiffView({
                 id="sync-scroll-switch"
                 checked={syncScroll}
                 onCheckedChange={setSyncScroll}
+                aria-label="Synchronize scroll"
               />
             </div>
           )}
@@ -176,7 +177,12 @@ export function SideBySideDiffView({
 
       {showCsvTable ? (
         <div>
-          <div className="max-h-[420px] overflow-auto">
+          <div
+            tabIndex={0}
+            role="region"
+            aria-label="Sanitized CSV table preview"
+            className="max-h-[420px] overflow-auto"
+          >
             <table className="w-full text-left font-mono text-xs">
               <thead className="sticky top-0 bg-bg-elevated">
                 <tr>
@@ -270,6 +276,9 @@ export function SideBySideDiffView({
             </div>
             <div
               ref={leftRef}
+              tabIndex={0}
+              role="region"
+              aria-label="Original text diff pane"
               onScroll={() => handleScroll('left')}
               data-testid="diff-original-pane"
               className="max-h-[420px] min-h-[220px] overflow-auto whitespace-pre-wrap break-words bg-bg-canvas/70 p-4 font-mono text-xs leading-6 text-text-secondary sm:text-sm"
@@ -314,6 +323,9 @@ export function SideBySideDiffView({
             </div>
             <div
               ref={rightRef}
+              tabIndex={0}
+              role="region"
+              aria-label="Sanitized text diff pane"
               onScroll={() => handleScroll('right')}
               data-testid="diff-sanitized-pane"
               className="max-h-[420px] min-h-[220px] overflow-auto whitespace-pre-wrap break-words bg-bg-canvas/70 p-4 font-mono text-xs leading-6 text-text-secondary sm:text-sm"

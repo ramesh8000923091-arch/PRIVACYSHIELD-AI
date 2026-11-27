@@ -11,6 +11,7 @@ interface FileUploadZoneProps {
   parsedCsv: ParsedCsvDocument | null;
   isProcessing: boolean;
   progressPercent: number;
+  showInlineProgress?: boolean;
   onFileSelect: (file: File) => void;
   onRemoveFile: () => void;
 }
@@ -20,6 +21,7 @@ export function FileUploadZone({
   parsedCsv,
   isProcessing,
   progressPercent,
+  showInlineProgress = true,
   onFileSelect,
   onRemoveFile,
 }: FileUploadZoneProps) {
@@ -40,7 +42,10 @@ export function FileUploadZone({
           e.preventDefault();
           if (!isProcessing) setIsDragging(true);
         }}
-        onDragLeave={() => setIsDragging(false)}
+        onDragLeave={(e) => {
+          if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+          setIsDragging(false);
+        }}
         onDrop={(e) => {
           e.preventDefault();
           setIsDragging(false);
@@ -86,6 +91,8 @@ export function FileUploadZone({
           ref={inputRef}
           type="file"
           accept=".txt,.csv,text/plain,text/csv"
+          aria-label="Upload local .txt or .csv file"
+          tabIndex={-1}
           className="hidden"
           disabled={isProcessing}
           data-testid="file-upload-input"
@@ -96,7 +103,7 @@ export function FileUploadZone({
         />
       </div>
 
-      {isProcessing && (
+      {showInlineProgress && isProcessing && (
         <div
           role="progressbar"
           aria-label="Local browser scan progress"

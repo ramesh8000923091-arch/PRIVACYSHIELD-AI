@@ -1,3 +1,5 @@
+
+import { useMemo } from 'react';
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Activity, CheckCircle2, Cpu, Download, ShieldAlert, ShieldCheck } from 'lucide-react';
 import {
@@ -23,13 +25,24 @@ export function AnalyticsDashboard({
   redactionMode,
   onDownloadReport,
 }: AnalyticsDashboardProps) {
+  const chartData = useMemo(
+    () =>
+      PII_CATEGORY_LIST.map((cat) => ({
+        name: cat.shortLabel,
+        fullName: cat.label,
+        count: analytics?.countsByCategory[cat.type] ?? 0,
+        color: cat.chartHex,
+      })),
+    [analytics]
+  );
+
   if (!analytics) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center justify-center gap-3 py-14 text-center">
           <Activity className="h-8 w-8 text-text-muted" aria-hidden="true" />
           <div className="space-y-1">
-            <h3 className="text-sm font-semibold text-text-primary">No Active Scan Metrics Yet</h3>
+            <h2 className="text-sm font-semibold text-text-primary">No Active Scan Metrics Yet</h2>
             <p className="max-w-md text-xs text-text-muted">
               Paste text, upload a file, or load sample data in the workspace to view real entity
               detection counts, distribution charts, and before/after telemetry.
@@ -39,13 +52,6 @@ export function AnalyticsDashboard({
       </Card>
     );
   }
-
-  const chartData = PII_CATEGORY_LIST.map((cat) => ({
-    name: cat.shortLabel,
-    fullName: cat.label,
-    count: analytics.countsByCategory[cat.type] ?? 0,
-    color: cat.chartHex,
-  }));
 
   const statusSafe = analytics.totalDetected === 0 || analytics.totalRedacted > 0;
 
@@ -70,7 +76,7 @@ export function AnalyticsDashboard({
           <CardContent className="p-5">
             <p className="font-mono text-xs text-text-muted">TOTAL REDACTED</p>
             <p
-              className="mt-1.5 font-mono text-3xl font-bold text-status-verified"
+              className="mt-1.5 font-mono text-3xl font-bold text-emerald-800 dark:text-emerald-300"
               data-testid="analytics-total-redacted"
             >
               {analytics.totalRedacted}
@@ -106,7 +112,7 @@ export function AnalyticsDashboard({
         <Card>
           <CardContent className="p-5">
             <p className="font-mono text-xs text-text-muted">ENGINE PERFORMANCE</p>
-            <p className="mt-1.5 font-mono text-3xl font-bold text-brand-primary">
+            <p className="mt-1.5 font-mono text-3xl font-bold text-blue-700 dark:text-blue-400">
               {analytics.processingTimeMs} ms
             </p>
             <p className="mt-1 inline-flex items-center gap-1 text-xs text-text-muted">
@@ -123,7 +129,7 @@ export function AnalyticsDashboard({
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <CardTitle>Category Distribution</CardTitle>
+                <CardTitle as="h2">Category Distribution</CardTitle>
                 <CardDescription>Actual detected entities by PII category</CardDescription>
               </div>
               <Button type="button" variant="outline" size="sm" onClick={onDownloadReport}>
@@ -181,7 +187,7 @@ export function AnalyticsDashboard({
 
         <Card className="lg:col-span-5">
           <CardHeader>
-            <CardTitle>Detection Breakdown &amp; Before/After</CardTitle>
+            <CardTitle as="h2">Detection Breakdown &amp; Before/After</CardTitle>
             <CardDescription>Exact counts without exposing raw sensitive values</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -215,13 +221,13 @@ export function AnalyticsDashboard({
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-text-muted">Sanitized Length</span>
-                <span className="text-status-verified">
+                <span className="text-emerald-800 dark:text-emerald-300">
                   {analytics.sanitizedCharCount.toLocaleString()} chars (
                   {analytics.sanitizedWordCount} words)
                 </span>
               </div>
               <div className="flex items-center justify-between border-t border-border-subtle pt-2">
-                <span className="inline-flex items-center gap-1.5 text-status-verified">
+                <span className="inline-flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300">
                   <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
                   Privacy Guarantee
                 </span>

@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { Badge, Button, Switch } from '@/components/ui';
 import { PII_CATEGORIES, PII_CATEGORY_LIST } from '@/constants';
+import { countEntitiesByCategory } from '@/services/detection';
 import type { DetectedEntity, PIIType } from '@/types';
 import { formatSafeEntityPreview } from '@/utils/safeMaskPreview';
 
@@ -18,6 +19,13 @@ export function DetectionResultsTable({
 }: DetectionResultsTableProps) {
   const [filter, setFilter] = useState<PIIType | 'ALL'>('ALL');
   const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
+
+  // Reset temporary raw previews whenever the entity list changes to avoid leaking across documents
+  useEffect(() => {
+    setRevealedIds(new Set());
+  }, [entities]);
+
+  const countsByCategory = useMemo(() => countEntitiesByCategory(entities), [entities]);
 
   const filtered = useMemo(
     () => (filter === 'ALL' ? entities : entities.filter((e) => e.type === filter)),
@@ -53,7 +61,7 @@ export function DetectionResultsTable({
           All ({entities.length})
         </button>
         {PII_CATEGORY_LIST.map((cat) => {
-          const count = entities.filter((e) => e.type === cat.type).length;
+          const count = countsByCategory[cat.type] ?? 0;
           return (
             <button
               key={cat.type}
@@ -128,9 +136,9 @@ export function DetectionResultsTable({
                       aria-label={revealed ? 'Hide raw value' : 'Reveal raw value temporarily'}
                     >
                       {revealed ? (
-                        <EyeOff className="h-3.5 w-3.5" />
+                        <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
                       ) : (
-                        <Eye className="h-3.5 w-3.5" />
+                        <Eye className="h-3.5 w-3.5" aria-hidden="true" />
                       )}
                     </Button>
                   </div>
@@ -204,7 +212,7 @@ export function DetectionResultsTable({
                               revealed ? 'Hide raw value' : 'Reveal raw value temporarily'
                             }
                             title={revealed ? 'Mask preview' : 'Temporarily reveal in RAM'}
-                            className="rounded p-1 text-text-muted hover:bg-bg-elevated hover:text-text-primary cursor-pointer"
+                            className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded text-text-muted hover:bg-bg-elevated hover:text-text-primary"
                           >
                             {revealed ? (
                               <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />

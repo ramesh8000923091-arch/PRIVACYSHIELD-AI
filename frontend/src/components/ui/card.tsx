@@ -22,19 +22,22 @@ export const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<
 );
 CardHeader.displayName = 'CardHeader';
 
-export const CardTitle = React.forwardRef<
-  HTMLHeadingElement,
-  React.HTMLAttributes<HTMLHeadingElement>
->(({ className, ...props }, ref) => (
-  <h3
-    ref={ref}
-    className={cn(
-      'text-base font-semibold leading-tight tracking-tight text-text-primary',
-      className
-    )}
-    {...props}
-  />
-));
+export interface CardTitleProps extends React.HTMLAttributes<HTMLHeadingElement> {
+  as?: 'h1' | 'h2' | 'h3' | 'h4';
+}
+
+export const CardTitle = React.forwardRef<HTMLHeadingElement, CardTitleProps>(
+  ({ className, as: Comp = 'h3', ...props }, ref) => (
+    <Comp
+      ref={ref}
+      className={cn(
+        'text-base font-semibold leading-tight tracking-tight text-text-primary',
+        className
+      )}
+      {...props}
+    />
+  )
+);
 CardTitle.displayName = 'CardTitle';
 
 export const CardDescription = React.forwardRef<

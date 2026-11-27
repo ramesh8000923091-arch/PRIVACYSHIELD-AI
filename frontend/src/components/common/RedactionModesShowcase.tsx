@@ -11,7 +11,7 @@ import {
   TabsTrigger,
 } from '@/components/ui';
 import { PII_CATEGORIES } from '@/constants';
-import type { PIIType, RedactionMode } from '@/types';
+import { isRedactionMode, type PIIType, type RedactionMode } from '@/types';
 
 interface ModeRow {
   type: PIIType;
@@ -146,11 +146,18 @@ export function RedactionModesShowcase() {
   return (
     <Tabs
       value={activeMode}
-      onValueChange={(value) => setActiveMode(value as RedactionMode)}
+      onValueChange={(value) => {
+        if (isRedactionMode(value)) {
+          setActiveMode(value);
+        }
+      }}
       className="w-full"
     >
       <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-        <TabsList className="grid w-full grid-cols-3 sm:w-auto">
+        <TabsList
+          aria-label="Redaction mode comparison"
+          className="grid w-full grid-cols-3 sm:w-auto"
+        >
           <TabsTrigger value="FULL_MASK" className="px-4 py-2 text-xs sm:text-sm">
             <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
             Full Mask
@@ -166,8 +173,12 @@ export function RedactionModesShowcase() {
         </TabsList>
 
         {activeMode === 'FULL_MASK' && (
-          <label className="inline-flex items-center gap-2.5 rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-xs font-medium text-text-secondary cursor-pointer">
+          <label
+            htmlFor="showcase-generic-token"
+            className="inline-flex cursor-pointer items-center gap-2.5 rounded-lg border border-border-default bg-bg-surface px-3 py-2 text-xs font-medium text-text-secondary"
+          >
             <Switch
+              id="showcase-generic-token"
               checked={useGenericToken}
               onCheckedChange={setUseGenericToken}
               aria-label="Toggle generic redacted token"
@@ -206,7 +217,7 @@ export function RedactionModesShowcase() {
 
                 {modeKey === 'PSEUDONYMIZE' && (
                   <div className="rounded-lg border border-brand-secondary/30 bg-brand-secondary/10 p-3.5 font-mono text-xs leading-relaxed text-text-secondary">
-                    <p className="mb-1.5 font-semibold text-brand-secondary">
+                    <p className="mb-1.5 font-semibold text-violet-700 dark:text-violet-300">
                       Consistency Example:
                     </p>
                     <p>Contact anuj@example.com → Contact USER_01</p>
@@ -222,9 +233,15 @@ export function RedactionModesShowcase() {
                 <table className="w-full text-left text-xs sm:text-sm">
                   <thead>
                     <tr className="border-b border-border-default bg-bg-elevated/70 font-mono text-[11px] uppercase tracking-wider text-text-muted">
-                      <th className="px-4 py-3">Category</th>
-                      <th className="px-4 py-3">Synthetic Input</th>
-                      <th className="px-4 py-3">Sanitized Output</th>
+                      <th scope="col" className="px-4 py-3">
+                        Category
+                      </th>
+                      <th scope="col" className="px-4 py-3">
+                        Synthetic Input
+                      </th>
+                      <th scope="col" className="px-4 py-3">
+                        Sanitized Output
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border-subtle">
@@ -257,7 +274,7 @@ export function RedactionModesShowcase() {
                             {row.original}
                           </td>
                           <td className="px-4 py-3">
-                            <div className="font-mono text-xs font-semibold text-status-verified">
+                            <div className="font-mono text-xs font-semibold text-emerald-800 dark:text-emerald-300">
                               {output}
                             </div>
                             {modeKey === 'PARTIAL_MASK' && (

@@ -39,7 +39,6 @@ interface WorkspaceState {
     file: UploadedFileMeta | null,
     csv?: ParsedCsvDocument | null
   ) => void;
-  setUploadedFile: (file: UploadedFileMeta | null, csv?: ParsedCsvDocument | null) => void;
   setDetectionResults: (
     entities: DetectedEntity[],
     analytics: DetectionAnalytics | null,
@@ -119,13 +118,6 @@ export const useWorkspaceStore = create<WorkspaceState>()((set) => ({
       analytics: null,
       isProcessing: Boolean(rawText),
       progressPercent: rawText ? 15 : 0,
-      errorMessage: null,
-    }),
-
-  setUploadedFile: (uploadedFile, parsedCsv = null) =>
-    set({
-      uploadedFile,
-      parsedCsv,
       errorMessage: null,
     }),
 

@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, CheckCircle2, Eye, ShieldCheck, Terminal } from 'lucide-react';
-import { Badge, Button, Tabs, TabsList, TabsTrigger } from '@/components/ui';
+import { Badge, Button, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui';
 import { PII_CATEGORIES } from '@/constants';
-import type { PIIType, RedactionMode } from '@/types';
+import { isRedactionMode, type PIIType, type RedactionMode } from '@/types';
 
 interface PreviewSegment {
   text: string;
@@ -160,10 +160,6 @@ const PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
   },
 ];
 
-function isRedactionMode(value: string): value is RedactionMode {
-  return value === 'FULL_MASK' || value === 'PARTIAL_MASK' || value === 'PSEUDONYMIZE';
-}
-
 function getRedactedReplacement(segment: PreviewSegment, mode: RedactionMode): string {
   if (!segment.piiType) return segment.text;
   if (mode === 'FULL_MASK') {
@@ -258,13 +254,33 @@ export function InteractiveHeroPreview() {
               setMode(value);
             }
           }}
-          aria-label="Preview redaction mode"
         >
-          <TabsList className="w-full sm:w-auto">
+          <TabsList aria-label="Preview redaction mode" className="w-full sm:w-auto">
             <TabsTrigger value="FULL_MASK">Full Mask</TabsTrigger>
             <TabsTrigger value="PARTIAL_MASK">Partial</TabsTrigger>
             <TabsTrigger value="PSEUDONYMIZE">Pseudonymize</TabsTrigger>
           </TabsList>
+          <TabsContent
+            value="FULL_MASK"
+            forceMount
+            className="sr-only data-[state=inactive]:hidden"
+          >
+            Full Mask preview selected.
+          </TabsContent>
+          <TabsContent
+            value="PARTIAL_MASK"
+            forceMount
+            className="sr-only data-[state=inactive]:hidden"
+          >
+            Partial Mask preview selected.
+          </TabsContent>
+          <TabsContent
+            value="PSEUDONYMIZE"
+            forceMount
+            className="sr-only data-[state=inactive]:hidden"
+          >
+            Pseudonymize preview selected.
+          </TabsContent>
         </Tabs>
       </div>
 
@@ -279,7 +295,11 @@ export function InteractiveHeroPreview() {
             </span>
             <span className="font-mono text-[10px] text-text-muted">RAM ONLY</span>
           </div>
-          <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-lg border border-border-subtle bg-bg-canvas/85 p-3.5 font-mono text-xs leading-6 text-text-secondary">
+          <pre
+            tabIndex={0}
+            aria-label="Detected synthetic PII preview"
+            className="overflow-x-auto whitespace-pre-wrap break-words rounded-lg border border-border-subtle bg-bg-canvas/85 p-3.5 font-mono text-xs leading-6 text-text-secondary"
+          >
             {scenario.segments.map((seg, idx) => {
               if (!seg.piiType) {
                 return <span key={idx}>{seg.text}</span>;
@@ -310,9 +330,13 @@ export function InteractiveHeroPreview() {
               <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
               Sanitized Output
             </span>
-            <span className="font-mono text-[10px] text-brand-secondary">{mode}</span>
+            <span className="font-mono text-[10px] text-violet-700 dark:text-violet-300">
+              {mode}
+            </span>
           </div>
           <pre
+            tabIndex={0}
+            aria-label="Sanitized output preview"
             data-testid="hero-preview-sanitized"
             className="overflow-x-auto whitespace-pre-wrap break-words rounded-lg border border-status-verified/25 bg-bg-canvas/85 p-3.5 font-mono text-xs leading-6 text-text-secondary"
           >

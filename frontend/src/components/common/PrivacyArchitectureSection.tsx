@@ -1,4 +1,3 @@
-import { useCallback, useEffect, useState } from 'react';
 import {
   CheckCircle2,
   Cpu,
@@ -11,36 +10,11 @@ import {
   XCircle,
 } from 'lucide-react';
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
-import { runPrivacyVerification } from '@/services/privacy';
+import { usePrivacyVerificationReport } from '@/hooks';
 import { isSupabaseConfigured } from '@/services/supabase';
-import { useWorkspaceStore } from '@/store';
-import type { PrivacyVerificationReport } from '@/types';
 
 export function PrivacyArchitectureSection() {
-  const entities = useWorkspaceStore((s) => s.entities);
-  const uploadedFile = useWorkspaceStore((s) => s.uploadedFile);
-  const analytics = useWorkspaceStore((s) => s.analytics);
-
-  const buildReport = useCallback((): PrivacyVerificationReport => {
-    const sensitiveSamples = [
-      ...entities.map((entity) => entity.value),
-      ...(uploadedFile?.name ? [uploadedFile.name] : []),
-    ];
-    return runPrivacyVerification({
-      sensitiveSamples,
-      analyticsSnapshot: analytics,
-    });
-  }, [entities, uploadedFile, analytics]);
-
-  const [report, setReport] = useState<PrivacyVerificationReport>(() => buildReport());
-
-  useEffect(() => {
-    setReport(buildReport());
-  }, [buildReport]);
-
-  function handleRunVerification() {
-    setReport(buildReport());
-  }
+  const { report, refreshReport } = usePrivacyVerificationReport();
 
   return (
     <div className="grid gap-6 lg:grid-cols-12">
@@ -100,7 +74,7 @@ export function PrivacyArchitectureSection() {
           </CardHeader>
           <CardContent className="grid gap-3 text-xs sm:grid-cols-2">
             <div className="rounded-lg border border-status-verified/25 bg-status-verified/10 p-3.5">
-              <p className="font-mono font-semibold text-status-verified">
+              <p className="font-mono font-semibold text-emerald-800 dark:text-emerald-300">
                 PERMITTED (OPT-IN ONLY)
               </p>
               <ul className="mt-2 space-y-1 text-text-secondary">
@@ -110,7 +84,9 @@ export function PrivacyArchitectureSection() {
               </ul>
             </div>
             <div className="rounded-lg border border-status-danger/25 bg-status-danger/10 p-3.5">
-              <p className="font-mono font-semibold text-status-danger">STRICTLY FORBIDDEN</p>
+              <p className="font-mono font-semibold text-red-700 dark:text-red-300">
+                STRICTLY FORBIDDEN
+              </p>
               <ul className="mt-2 space-y-1 text-text-secondary">
                 <li>• Raw documents, pasted text, or uploaded files</li>
                 <li>• Detected emails, phones, IPs, PANs, Aadhaar, cards</li>
@@ -169,7 +145,7 @@ export function PrivacyArchitectureSection() {
             <span className="font-mono text-[10px] text-text-muted">
               Checked: {new Date(report.generatedAt).toLocaleTimeString()}
             </span>
-            <Button type="button" variant="outline" size="sm" onClick={handleRunVerification}>
+            <Button type="button" variant="outline" size="sm" onClick={refreshReport}>
               <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
               Re-run Privacy Check
             </Button>

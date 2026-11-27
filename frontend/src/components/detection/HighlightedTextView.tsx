@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, EyeOff, Info, ShieldAlert, X } from 'lucide-react';
 import { Badge, Button } from '@/components/ui';
 import { PII_CATEGORIES } from '@/constants';
@@ -29,15 +29,28 @@ export function HighlightedTextView({
   onToggleExclude,
 }: HighlightedTextViewProps) {
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
+  const lastTriggerRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    setSelectedEntityId(null);
+    lastTriggerRef.current = null;
+  }, [text]);
+
+  const closeInspector = useCallback(() => {
+    setSelectedEntityId(null);
+    lastTriggerRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     if (!selectedEntityId) return;
     function handleEsc(event: KeyboardEvent) {
-      if (event.key === 'Escape') setSelectedEntityId(null);
+      if (event.key === 'Escape') {
+        closeInspector();
+      }
     }
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [selectedEntityId]);
+  }, [selectedEntityId, closeInspector]);
 
   const slices = useMemo<RenderSlice[]>(() => {
     if (!text) return [];
@@ -96,6 +109,8 @@ export function HighlightedTextView({
   return (
     <div className="space-y-3">
       <div
+        role="region"
+        tabIndex={0}
         className="max-h-72 overflow-y-auto whitespace-pre-wrap break-words rounded-xl border border-border-default bg-bg-canvas p-4 font-mono text-xs leading-6 text-text-secondary sm:text-sm"
         aria-label="Live highlighted sensitive text"
       >
@@ -114,7 +129,14 @@ export function HighlightedTextView({
               key={slice.key}
               type="button"
               aria-pressed={isSelected}
-              onClick={() => setSelectedEntityId(isSelected ? null : entity.id)}
+              onClick={(event) => {
+                if (isSelected) {
+                  setSelectedEntityId(null);
+                } else {
+                  lastTriggerRef.current = event.currentTarget;
+                  setSelectedEntityId(entity.id);
+                }
+              }}
               title={`${meta.label} (${isExcluded ? 'excluded' : 'will redact'}) — click to inspect`}
               className={`mx-0.5 inline rounded px-1 py-0.5 font-medium transition-all cursor-pointer ${
                 isExcluded ? 'opacity-75 line-through' : ''
@@ -187,7 +209,7 @@ export function HighlightedTextView({
               type="button"
               size="icon"
               variant="ghost"
-              onClick={() => setSelectedEntityId(null)}
+              onClick={closeInspector}
               aria-label="Close entity inspector"
               title="Close inspector (Esc)"
             >

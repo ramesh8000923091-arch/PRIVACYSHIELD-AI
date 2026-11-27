@@ -7,6 +7,7 @@ import {
   applyRedaction,
   PseudonymMapper,
 } from '@/services/redaction';
+import { isRedactionMode } from '@/types';
 
 describe('Phase 6 — Redaction Engine & Consistent Pseudonymization', () => {
   it('applies full mask with category tokens and generic [REDACTED] option', () => {
@@ -171,5 +172,34 @@ describe('Phase 6 — Redaction Engine & Consistent Pseudonymization', () => {
     );
     expect(out.sanitizedText).toBe('Hello world');
     expect(out.redactedCount).toBe(0);
+  });
+
+  it('covers partial mask fallbacks, hyphenated Aadhaar, double-digit pseudonym counters, and mode guard', () => {
+    expect(isRedactionMode('FULL_MASK')).toBe(true);
+    expect(isRedactionMode('PARTIAL_MASK')).toBe(true);
+    expect(isRedactionMode('PSEUDONYMIZE')).toBe(true);
+    expect(isRedactionMode('INVALID')).toBe(false);
+
+    expect(applyPartialMask('AADHAAR', '2345-6789-0128')).toBe('XXXX-XXXX-0128');
+    expect(applyPartialMask('AADHAAR', '123')).toBe('XXXX XXXX XXXX');
+    expect(applyPartialMask('PHONE', '12')).toBe('XXXXXXXXXX');
+    expect(applyPartialMask('PAN', 'SHORT')).toBe('XXXXXXXXXX');
+    expect(applyPartialMask('CREDIT_CARD', '12')).toBe('XXXX-XXXX-XXXX-XXXX');
+    expect(applyPartialMask('EMAIL', 'invalid-no-at')).toBe('[REDACTED_EMAIL]');
+
+    const mapper = new PseudonymMapper();
+    for (let i = 1; i <= 10; i += 1) {
+      const token = mapper.getOrCreateToken('EMAIL', `user${i}@example.com`);
+      if (i === 10) {
+        expect(token).toBe('USER_10');
+      }
+    }
+    expect(mapper.getCountsByCategory().EMAIL).toBe(10);
+
+    const restored = mapper.restoreText('To: USER_01, USER_10, and USER_01.');
+    expect(restored.restoredCount).toBe(3);
+    expect(restored.restoredText).toBe(
+      'To: user1@example.com, user10@example.com, and user1@example.com.'
+    );
   });
 });
