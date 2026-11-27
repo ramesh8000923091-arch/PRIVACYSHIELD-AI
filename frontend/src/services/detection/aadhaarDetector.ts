@@ -11,7 +11,7 @@ import { isValidVerhoeff } from './verhoeffValidator';
  * Clearly distinguishes mathematical checksum validation from UIDAI verification.
  */
 const AADHAAR_CANDIDATE_REGEX =
-  /(?<![\dA-Za-z])([2-9]\d{3}[\s-]\d{4}[\s-]\d{4}|[2-9]\d{11})(?![\dA-Za-z])/g;
+  /(?<![\dA-Za-z])([2-9]\d{3}[ -]\d{4}[ -]\d{4}|[2-9]\d{11})(?![\dA-Za-z])/g;
 
 const AADHAAR_CONTEXT_REGEX = /\b(aadhaar|aadhar|uid|uidai|kyc|identity)\b/i;
 
@@ -46,7 +46,7 @@ export function detectAadhaar(text: string): DetectedEntity[] {
     // Guard against substrings of 16-digit hyphenated/spaced cards
     const prevContext = text.slice(Math.max(0, start - 5), start);
     const nextContext = text.slice(end, Math.min(text.length, end + 5));
-    if (/\d[\s-]$/.test(prevContext) || /^[\s-]\d/.test(nextContext)) {
+    if (/\d[ -]$/.test(prevContext) || /^[ -]\d/.test(nextContext)) {
       continue;
     }
 

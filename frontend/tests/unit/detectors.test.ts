@@ -79,6 +79,12 @@ describe('Phase 5 — Modular PII Detection Engine', () => {
       const found = detectIpAddresses(log);
       expect(found.map((e) => e.value)).toEqual(['10.0.0.5', '2001:db8::8a2e']);
     });
+
+    it('detects sentence-ending IPv4 with trailing period while rejecting 5-octet strings (regression)', () => {
+      const text = 'Primary host is 192.168.1.42. Invalid five-octet 192.168.1.42.5 ignored.';
+      const found = detectIpAddresses(text);
+      expect(found.map((e) => e.value)).toEqual(['192.168.1.42']);
+    });
   });
 
   describe('Indian PAN Detector', () => {
@@ -121,10 +127,22 @@ describe('Phase 5 — Modular PII Detection Engine', () => {
       expect(isValidLuhn('0000000000000000')).toBe(false);
     });
 
-    it('extracts only Luhn-valid cards from text', () => {
-      const text = 'Cards: 4111-1111-1111-1111, 5500 0000 0000 0004, invalid 1234-5678-9012-3456';
+    it('extracts only Luhn-valid cards from text including adjacent multiline entries (regression)', () => {
+      const text = '4111-1111-1111-1111\n5500 0000 0000 0004\ninvalid 1234-5678-9012-3456';
       const found = detectCreditCards(text);
       expect(found.map((e) => e.value)).toEqual(['4111-1111-1111-1111', '5500 0000 0000 0004']);
+    });
+
+    it('handles empty input and never mutates original strings across adjacent multiline entities', () => {
+      expect(detectPII('').totalDetected).toBe(0);
+      const original = `a@example.com\n+91 9876543210\n${SYNTHETIC_AADHAAR_1}\nABCPK1234F`;
+      const copy = String(original);
+      const summary = detectPII(original);
+      expect(original).toBe(copy);
+      expect(summary.totalDetected).toBe(4);
+      for (const ent of summary.entities) {
+        expect(original.slice(ent.start, ent.end)).toBe(ent.value);
+      }
     });
   });
 

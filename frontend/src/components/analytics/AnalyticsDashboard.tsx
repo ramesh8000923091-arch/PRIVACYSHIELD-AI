@@ -133,8 +133,14 @@ export function AnalyticsDashboard({
             </div>
           </CardHeader>
           <CardContent>
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-64 min-h-[256px] w-full min-w-[200px]">
+              <ResponsiveContainer
+                width="100%"
+                height="100%"
+                minWidth={200}
+                minHeight={240}
+                initialDimension={{ width: 480, height: 256 }}
+              >
                 <BarChart data={chartData} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
                   <XAxis
                     dataKey="name"

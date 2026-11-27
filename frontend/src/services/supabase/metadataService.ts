@@ -27,7 +27,7 @@ export async function submitConsentedAggregateStats(
     return { synced: false, reason: 'local-only-mode' };
   }
 
-  const client = getSupabaseClient();
+  const client = await getSupabaseClient();
   if (!client) {
     return { synced: false, reason: 'client-unavailable' };
   }

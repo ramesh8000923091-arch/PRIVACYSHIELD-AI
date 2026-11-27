@@ -3,4 +3,3 @@ export { Card, CardHeader, CardTitle, CardDescription, CardContent } from './car
 export { Badge, type BadgeProps } from './badge';
 export { Tabs, TabsList, TabsTrigger, TabsContent } from './tabs';
 export { Switch } from './switch';
-export { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from './tooltip';

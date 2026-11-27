@@ -1,6 +1,7 @@
 import type { DetectedEntity } from '@/types';
 
-const IPV4_CANDIDATE_REGEX = /(?<![\d.A-Za-z])(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?![\d.A-Za-z])/g;
+const IPV4_CANDIDATE_REGEX =
+  /(?<![\d.A-Za-z])(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?![\dA-Za-z]|\.\d)/g;
 
 const IPV6_CANDIDATE_REGEX =
   /(?<![A-Fa-f0-9:])((?:[A-Fa-f0-9]{0,4}:){2,7}[A-Fa-f0-9.]{0,15})(?![A-Fa-f0-9:])/g;

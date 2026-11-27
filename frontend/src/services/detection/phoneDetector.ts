@@ -10,7 +10,7 @@ import type { DetectedEntity } from '@/types';
  * Avoids matching substrings inside longer numeric sequences, credit cards, Aadhaar, or IP addresses.
  */
 const INDIAN_PHONE_REGEX =
-  /(?<![\d.+A-Za-z])((?:\+91[\s-]?|91[\s-]|0[\s-]?)?(?:[6-9]\d{9}|[6-9]\d{4}[\s-]\d{5}|[6-9]\d{2}[\s-]\d{3}[\s-]\d{4}|[6-9]\d{3}[\s-]\d{3}[\s-]\d{3}))(?![\dA-Za-z])/g;
+  /(?<![\d.+A-Za-z])((?:\+91[ -]?|91[ -]|0[ -]?)?(?:[6-9]\d{9}|[6-9]\d{4}[ -]\d{5}|[6-9]\d{2}[ -]\d{3}[ -]\d{4}|[6-9]\d{3}[ -]\d{3}[ -]\d{3}))(?![\dA-Za-z])/g;
 
 export function normalizeIndianPhone(raw: string): string {
   const digits = raw.replace(/\D/g, '');

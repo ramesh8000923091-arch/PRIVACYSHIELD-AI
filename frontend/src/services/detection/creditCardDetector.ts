@@ -6,7 +6,7 @@ import { isValidLuhn, stripCardSeparators } from './luhnValidator';
  * and accepts ONLY candidates that pass strict Luhn mod-10 validation.
  * Never logs or persists detected card numbers.
  */
-const CREDIT_CARD_CANDIDATE_REGEX = /(?<![\dA-Za-z])([1-9](?:[\d][\s-]?){12,18})(?![\dA-Za-z])/g;
+const CREDIT_CARD_CANDIDATE_REGEX = /(?<![\dA-Za-z])([1-9](?:[\d][ -]?){12,18})(?![\dA-Za-z])/g;
 
 function hasConsistentCardSeparators(rawValue: string): boolean {
   const trimmed = rawValue.trim();
@@ -14,7 +14,7 @@ function hasConsistentCardSeparators(rawValue: string): boolean {
     return false;
   }
   // Reject double separators like "4111--1111" or mixed leading/trailing separators
-  if (/[\s-]{2,}/.test(trimmed) || /^[\s-]|[\s-]$/.test(trimmed)) {
+  if (/[ -]{2,}/.test(trimmed) || /^[ -]|[ -]$/.test(trimmed)) {
     return false;
   }
   const hasSpaces = trimmed.includes(' ');

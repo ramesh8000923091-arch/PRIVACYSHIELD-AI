@@ -54,9 +54,28 @@ describe('Phase 10 — Workspace End-to-End Integration Pipeline', () => {
       expect(sanitizedPane).toHaveTextContent('CARD_01');
     });
 
-    // 5. Verify local activity log recorded metadata without any raw PII
+    // 5. Verify local activity log recorded SANITIZATION_COMPLETED metadata without any raw PII
     const entries = useAuditLogStore.getState().entries;
-    expect(entries.length).toBeGreaterThan(0);
+    expect(entries.some((e) => e.action === 'SANITIZATION_COMPLETED')).toBe(true);
+
+    // 6. Test editor Undo/Redo after sample load + edit + Detect Now + Clear (regression)
+    const editor = screen.getByLabelText(/Raw document text input/i) as HTMLTextAreaElement;
+    await user.type(editor, ' EXTRA');
+    expect(editor.value).toContain('EXTRA');
+
+    await user.click(screen.getByRole('button', { name: /Undo edit/i }));
+    await user.click(screen.getByRole('button', { name: /Redo edit/i }));
+    await user.click(screen.getByRole('button', { name: /Detect Now/i }));
+
+    // 7. Navigate through all sidebar views
+    await user.click(screen.getByRole('button', { name: /^Dashboard$/i }));
+    expect(screen.getByText(/Category Distribution/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Detection Results/i }));
+    expect(screen.getByText(/Detection Results & Exclusion Manager/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /^Settings$/i }));
+    expect(screen.getByText(/Default Redaction Mode/i)).toBeInTheDocument();
 
     const privacyReport = runPrivacyVerification({
       sensitiveSamples: [

@@ -1,11 +1,13 @@
-import { useRef, useState } from 'react';
-import { FileSpreadsheet, RotateCcw, RotateCw, Sparkles, Trash2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { FileSpreadsheet, RotateCcw, RotateCw, ScanSearch, Sparkles, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { countWords } from '@/utils/formatters';
 
 interface TextInputEditorProps {
   value: string;
+  isProcessing?: boolean;
   onChange: (next: string) => void;
+  onRunDetection: () => void;
   onLoadSample: () => void;
   onLoadSampleCsv: () => void;
   onClear: () => void;
@@ -13,7 +15,9 @@ interface TextInputEditorProps {
 
 export function TextInputEditor({
   value,
+  isProcessing = false,
   onChange,
+  onRunDetection,
   onLoadSample,
   onLoadSampleCsv,
   onClear,
@@ -21,6 +25,20 @@ export function TextInputEditor({
   const [undoStack, setUndoStack] = useState<string[]>([]);
   const [redoStack, setRedoStack] = useState<string[]>([]);
   const lastCommittedRef = useRef(value);
+
+  // Keep undo/redo reference synced when value changes externally (e.g., Sample loaded / Clear)
+  useEffect(() => {
+    if (value !== lastCommittedRef.current) {
+      if (value === '') {
+        setUndoStack([]);
+        setRedoStack([]);
+      } else if (lastCommittedRef.current !== '') {
+        setUndoStack((prev) => [...prev.slice(-24), lastCommittedRef.current]);
+        setRedoStack([]);
+      }
+      lastCommittedRef.current = value;
+    }
+  }, [value]);
 
   function handleTextChange(next: string) {
     if (next !== lastCommittedRef.current) {
@@ -64,6 +82,17 @@ export function TextInputEditor({
             <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
             Sample CSV
           </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={onRunDetection}
+            disabled={!value || isProcessing}
+            title={!value ? 'Enter or load text to run detection' : 'Run immediate PII scan'}
+          >
+            <ScanSearch className="h-3.5 w-3.5" aria-hidden="true" />
+            Detect Now
+          </Button>
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -74,7 +103,7 @@ export function TextInputEditor({
             onClick={handleUndo}
             disabled={undoStack.length === 0}
             aria-label="Undo edit"
-            title="Undo"
+            title={undoStack.length === 0 ? 'Nothing to undo' : 'Undo last edit'}
           >
             <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
           </Button>
@@ -85,7 +114,7 @@ export function TextInputEditor({
             onClick={handleRedo}
             disabled={redoStack.length === 0}
             aria-label="Redo edit"
-            title="Redo"
+            title={redoStack.length === 0 ? 'Nothing to redo' : 'Redo edit'}
           >
             <RotateCw className="h-3.5 w-3.5" aria-hidden="true" />
           </Button>
@@ -96,6 +125,7 @@ export function TextInputEditor({
             onClick={onClear}
             disabled={!value}
             aria-label="Clear workspace"
+            title={!value ? 'Workspace is already empty' : 'Clear all text and detections from RAM'}
           >
             <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
             Clear

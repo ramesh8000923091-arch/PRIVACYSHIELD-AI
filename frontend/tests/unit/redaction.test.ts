@@ -74,4 +74,34 @@ describe('Phase 6 — Redaction Engine & Consistent Pseudonymization', () => {
     expect(result.diffSegments.some((seg) => seg.kind === 'excluded')).toBe(true);
     expect(result.diffSegments.some((seg) => seg.kind === 'redacted')).toBe(true);
   });
+
+  it('supports cross-document pseudonym retention when explicitly opted in, and handles empty input', () => {
+    const emptyRes = applyRedaction('', [], {
+      mode: 'FULL_MASK',
+      fullMaskVariant: 'CATEGORY_TAG',
+      excludedEntityIds: new Set(),
+    });
+    expect(emptyRes.sanitizedText).toBe('');
+    expect(emptyRes.diffSegments).toEqual([]);
+
+    const sharedMapper = new PseudonymMapper();
+    const doc1 = 'Owner: alice@example.com';
+    const doc2 = 'New: bob@example.com, Returning: ALICE@example.com';
+
+    const out1 = applyRedaction(
+      doc1,
+      detectPII(doc1).entities,
+      { mode: 'PSEUDONYMIZE', fullMaskVariant: 'CATEGORY_TAG', excludedEntityIds: new Set() },
+      sharedMapper
+    );
+    const out2 = applyRedaction(
+      doc2,
+      detectPII(doc2).entities,
+      { mode: 'PSEUDONYMIZE', fullMaskVariant: 'CATEGORY_TAG', excludedEntityIds: new Set() },
+      sharedMapper
+    );
+
+    expect(out1.sanitizedText).toBe('Owner: USER_01');
+    expect(out2.sanitizedText).toBe('New: USER_02, Returning: USER_01');
+  });
 });

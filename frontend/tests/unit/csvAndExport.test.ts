@@ -1,10 +1,14 @@
-import { describe, expect, it } from 'vitest';
-import { DEFAULT_ENABLED_CATEGORIES, SAMPLE_CSV_TEXT } from '@/constants';
+import { describe, expect, it, vi } from 'vitest';
+import { DEFAULT_ENABLED_CATEGORIES, LIMITS, SAMPLE_CSV_TEXT } from '@/constants';
 import { parseCsvContent, sanitizeCsvDocument } from '@/services/csv';
-import { buildSanitizedFileName, createSafePrivacyReport } from '@/services/export';
+import {
+  buildSanitizedFileName,
+  createSafePrivacyReport,
+  downloadSanitizedFile,
+} from '@/services/export';
 import { verifyNoSensitiveDataInPayload } from '@/services/privacy';
 import { PseudonymMapper } from '@/services/redaction';
-import { validateUploadedFile } from '@/utils/fileValidation';
+import { containsBinaryNullBytes, validateUploadedFile } from '@/utils/fileValidation';
 
 describe('Phase 8 — CSV Cell Sanitization, File Validation & Safe Export', () => {
   it('preserves CSV rows, columns, headers, and commas inside quoted fields during sanitization', () => {
@@ -65,6 +69,53 @@ describe('Phase 8 — CSV Cell Sanitization, File Validation & Safe Export', () 
 
     const emptyFile = new File([], 'empty.txt', { type: 'text/plain' });
     expect(validateUploadedFile(emptyFile).valid).toBe(false);
+
+    // File exceeding 10 MB limit must be rejected
+    const oversized = new File(['x'], 'huge.txt', { type: 'text/plain' });
+    Object.defineProperty(oversized, 'size', { value: LIMITS.MAX_FILE_SIZE_BYTES + 1 });
+    expect(validateUploadedFile(oversized).valid).toBe(false);
+    expect(containsBinaryNullBytes('clean text')).toBe(false);
+    expect(containsBinaryNullBytes('bad\u0000binary')).toBe(true);
+  });
+
+  it('handles quoted newlines, empty cells, and Unicode inside CSV without corrupting structure', () => {
+    const complexCsv =
+      'id,label,notes,empty_col\n1,"नमस्ते, User","Line 1\nReach anuj@example.com",\n2,"Plain","IP 10.0.0.5",';
+    const { document: csvDoc } = parseCsvContent(complexCsv, 'unicode.csv', complexCsv.length);
+    expect(csvDoc.rows).toHaveLength(3);
+
+    const sanitized = sanitizeCsvDocument(
+      csvDoc,
+      { enabledCategories: DEFAULT_ENABLED_CATEGORIES },
+      { mode: 'FULL_MASK', fullMaskVariant: 'CATEGORY_TAG', excludedEntityIds: new Set() }
+    );
+
+    const reparsed = parseCsvContent(
+      sanitized.sanitizedCsvText,
+      'unicode-sanitized.csv',
+      sanitized.sanitizedCsvText.length
+    );
+    expect(reparsed.document.rows).toHaveLength(3);
+    expect(reparsed.document.rows[1][1]).toBe('नमस्ते, User');
+    expect(reparsed.document.rows[1][2]).toBe('Line 1\nReach [REDACTED_EMAIL]');
+    expect(reparsed.document.rows[1][3]).toBe('');
+    expect(reparsed.document.rows[2][2]).toBe('IP [REDACTED_IP_ADDRESS]');
+  });
+
+  it('releases temporary Blob object URLs immediately after download (regression)', () => {
+    const createSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-url');
+    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    const fileName = downloadSanitizedFile('clean content', 'txt', 'report.txt');
+    expect(fileName).toBe('report-sanitized.txt');
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    expect(revokeSpy).toHaveBeenCalledWith('blob:mock-url');
+
+    createSpy.mockRestore();
+    revokeSpy.mockRestore();
+    clickSpy.mockRestore();
   });
 
   it('builds non-overwriting sanitized filenames and zero-PII privacy reports', () => {

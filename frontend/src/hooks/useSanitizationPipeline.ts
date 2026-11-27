@@ -22,7 +22,9 @@ export interface ToastMessage {
 export function useSanitizationPipeline() {
   const mapperRef = useRef<PseudonymMapper>(new PseudonymMapper());
   const abortControllerRef = useRef<AbortController | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
   const lastProcessedTextRef = useRef<string>('');
+  const [scanNonce, setScanNonce] = useState(0);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [sanitizedCsvRows, setSanitizedCsvRows] = useState<string[][]>([]);
   const [mappingCount, setMappingCount] = useState(0);
@@ -60,11 +62,24 @@ export function useSanitizationPipeline() {
 
   const addAuditEntry = useAuditLogStore((s) => s.addEntry);
 
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current !== null) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
   const showToast = useCallback((text: string, tone: ToastMessage['tone'] = 'success') => {
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current);
+    }
     const id = Date.now();
     setToast({ id, text, tone });
-    window.setTimeout(() => {
+    toastTimerRef.current = window.setTimeout(() => {
       setToast((current) => (current?.id === id ? null : current));
+      toastTimerRef.current = null;
     }, 3500);
   }, []);
 
@@ -125,11 +140,12 @@ export function useSanitizationPipeline() {
           if (isNewDocument) {
             lastProcessedTextRef.current = rawText;
             addAuditEntry({
-              action: 'DETECTION_COMPLETED',
+              action: 'SANITIZATION_COMPLETED',
               detectedCount: csvPreview.entities.length,
+              redactedCount: csvPreview.redactedCount,
               redactionMode: useWorkspaceStore.getState().redactionMode,
               status: 'SUCCESS',
-              note: 'CSV cell-level scan completed locally',
+              note: 'CSV cell-level scan and sanitization completed locally',
             });
           }
           return;
@@ -166,8 +182,9 @@ export function useSanitizationPipeline() {
         if (isNewDocument) {
           lastProcessedTextRef.current = rawText;
           addAuditEntry({
-            action: 'DETECTION_COMPLETED',
+            action: 'SANITIZATION_COMPLETED',
             detectedCount: summary.totalDetected,
+            redactedCount: summary.totalDetected,
             redactionMode: useWorkspaceStore.getState().redactionMode,
             status: 'SUCCESS',
             note: summary.usedWorker
@@ -196,6 +213,7 @@ export function useSanitizationPipeline() {
     rawText,
     parsedCsv,
     enabledCategories,
+    scanNonce,
     setDetectionResults,
     setRedactionOutput,
     setProcessing,
@@ -450,6 +468,13 @@ export function useSanitizationPipeline() {
     showToast('Workspace cleared from browser memory.', 'info');
   }, [resetWorkspace, addAuditEntry, showToast]);
 
+  const runManualScan = useCallback(() => {
+    if (!useWorkspaceStore.getState().rawText) return;
+    lastProcessedTextRef.current = '';
+    setScanNonce((n) => n + 1);
+    showToast('Re-scanned document locally in browser RAM.');
+  }, [showToast]);
+
   const cancelProcessing = useCallback(() => {
     abortControllerRef.current?.abort();
     setProcessing(false, 0);
@@ -484,6 +509,7 @@ export function useSanitizationPipeline() {
     handleModeChange,
     handleResetMappings,
     handleClearWorkspace,
+    runManualScan,
     cancelProcessing,
     showToast,
   };

@@ -54,6 +54,8 @@ export function WorkspacePage() {
 
   const theme = usePreferencesStore((s) => s.theme);
   const toggleTheme = usePreferencesStore((s) => s.toggleTheme);
+  const defaultRedactionMode = usePreferencesStore((s) => s.defaultRedactionMode);
+  const setDefaultRedactionMode = usePreferencesStore((s) => s.setDefaultRedactionMode);
   const enabledCategories = usePreferencesStore((s) => s.enabledCategories);
   const toggleCategory = usePreferencesStore((s) => s.toggleCategory);
   const retainMappingsAcrossDocuments = usePreferencesStore((s) => s.retainMappingsAcrossDocuments);
@@ -68,18 +70,19 @@ export function WorkspacePage() {
   const clearAuditEntries = useAuditLogStore((s) => s.clearEntries);
 
   // Keyboard shortcuts: Ctrl/Cmd+Shift+L loads sample data, Escape cancels background scan
+  const { loadSampleText, cancelProcessing, isProcessing } = pipeline;
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'l') {
         event.preventDefault();
-        pipeline.loadSampleText();
-      } else if (event.key === 'Escape' && pipeline.isProcessing) {
-        pipeline.cancelProcessing();
+        loadSampleText();
+      } else if (event.key === 'Escape' && isProcessing) {
+        cancelProcessing();
       }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [pipeline]);
+  }, [loadSampleText, cancelProcessing, isProcessing]);
 
   const countsByCategory = pipeline.analytics?.countsByCategory ?? createEmptyCategoryCounts();
 
@@ -226,10 +229,12 @@ export function WorkspacePage() {
                     <TabsContent value="PASTE" className="mt-0">
                       <TextInputEditor
                         value={pipeline.rawText}
+                        isProcessing={pipeline.isProcessing}
                         onChange={(next) => {
                           pipeline.setUploadedFile(null, null);
                           pipeline.setRawText(next, 'PASTE');
                         }}
+                        onRunDetection={pipeline.runManualScan}
                         onLoadSample={pipeline.loadSampleText}
                         onLoadSampleCsv={pipeline.loadSampleCsv}
                         onClear={pipeline.handleClearWorkspace}
@@ -467,6 +472,29 @@ export function WorkspacePage() {
                     onCheckedChange={toggleTheme}
                     aria-label="Toggle dark theme"
                   />
+                </div>
+
+                <div className="flex flex-col justify-between gap-3 rounded-lg border border-border-subtle bg-bg-elevated/40 p-4 sm:flex-row sm:items-center">
+                  <div>
+                    <p className="text-sm font-medium text-text-primary">Default Redaction Mode</p>
+                    <p className="text-xs text-text-muted">
+                      Applied when starting a new session; also updates active workspace mode.
+                    </p>
+                  </div>
+                  <Tabs
+                    value={defaultRedactionMode}
+                    onValueChange={(value) => {
+                      const nextMode = value as typeof defaultRedactionMode;
+                      setDefaultRedactionMode(nextMode);
+                      pipeline.handleModeChange(nextMode);
+                    }}
+                  >
+                    <TabsList>
+                      <TabsTrigger value="FULL_MASK">Full</TabsTrigger>
+                      <TabsTrigger value="PARTIAL_MASK">Partial</TabsTrigger>
+                      <TabsTrigger value="PSEUDONYMIZE">Pseudo</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
                 </div>
 
                 <div className="flex items-center justify-between gap-4 rounded-lg border border-border-subtle bg-bg-elevated/40 p-4">
