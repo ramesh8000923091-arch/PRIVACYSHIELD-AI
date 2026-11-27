@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshCw, ShieldCheck } from 'lucide-react';
 import {
   Badge,
@@ -9,23 +9,60 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui';
+import { resetVolatileSessionMapper } from '@/hooks/useSanitizationPipeline';
 import { runPrivacyVerification } from '@/services/privacy';
 import { useAuditLogStore, usePreferencesStore, useWorkspaceStore } from '@/store';
+import type { PrivacyVerificationReport } from '@/types';
 
 export function AboutPage() {
-  const [report, setReport] = useState(() => runPrivacyVerification());
+  const entities = useWorkspaceStore((s) => s.entities);
+  const uploadedFile = useWorkspaceStore((s) => s.uploadedFile);
+  const analytics = useWorkspaceStore((s) => s.analytics);
   const clearAudit = useAuditLogStore((s) => s.clearEntries);
   const resetPrefs = usePreferencesStore((s) => s.resetPreferences);
   const resetWorkspace = useWorkspaceStore((s) => s.resetWorkspace);
   const [clearedBanner, setClearedBanner] = useState(false);
+  const bannerTimerRef = useRef<number | null>(null);
+
+  const buildReport = useCallback((): PrivacyVerificationReport => {
+    const sensitiveSamples = [
+      ...entities.map((entity) => entity.value),
+      ...(uploadedFile?.name ? [uploadedFile.name] : []),
+    ];
+    return runPrivacyVerification({
+      sensitiveSamples,
+      analyticsSnapshot: analytics,
+    });
+  }, [entities, uploadedFile, analytics]);
+
+  const [report, setReport] = useState<PrivacyVerificationReport>(() => buildReport());
+
+  useEffect(() => {
+    setReport(buildReport());
+  }, [buildReport]);
+
+  useEffect(() => {
+    return () => {
+      if (bannerTimerRef.current !== null) {
+        window.clearTimeout(bannerTimerRef.current);
+      }
+    };
+  }, []);
 
   function handleClearAllLocalState() {
+    resetVolatileSessionMapper();
     resetWorkspace();
     clearAudit();
     resetPrefs();
-    setReport(runPrivacyVerification());
+    setReport(runPrivacyVerification({ sensitiveSamples: [], analyticsSnapshot: null }));
     setClearedBanner(true);
-    window.setTimeout(() => setClearedBanner(false), 3000);
+    if (bannerTimerRef.current !== null) {
+      window.clearTimeout(bannerTimerRef.current);
+    }
+    bannerTimerRef.current = window.setTimeout(() => {
+      setClearedBanner(false);
+      bannerTimerRef.current = null;
+    }, 3000);
   }
 
   return (
@@ -45,7 +82,7 @@ export function AboutPage() {
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setReport(runPrivacyVerification())}
+                onClick={() => setReport(buildReport())}
               >
                 <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
                 Re-verify
@@ -133,11 +170,13 @@ export function AboutPage() {
               <Button type="button" variant="outline" size="sm" onClick={handleClearAllLocalState}>
                 Clear Local Activity &amp; Reset Preferences
               </Button>
-              {clearedBanner && (
-                <span className="font-mono text-xs text-status-verified">
-                  Local activity cleared.
-                </span>
-              )}
+              <div role="status" aria-live="polite">
+                {clearedBanner && (
+                  <span className="font-mono text-xs text-status-verified">
+                    Local activity and volatile RAM mappings cleared.
+                  </span>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>

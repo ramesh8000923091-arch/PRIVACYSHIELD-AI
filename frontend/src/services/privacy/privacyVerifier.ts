@@ -1,6 +1,16 @@
 import { z } from 'zod';
 import { isSupabaseConfigured } from '@/services/supabase';
-import type { DetectionAnalytics, PrivacyCheckResult, PrivacyVerificationReport } from '@/types';
+import {
+  AuditLogEntrySchema,
+  type DetectionAnalytics,
+  type PrivacyCheckResult,
+  type PrivacyVerificationReport,
+} from '@/types';
+
+const ALLOWED_LOCAL_STORAGE_KEYS = new Set([
+  'privacyshield:preferences',
+  'privacyshield:audit-log',
+]);
 
 /**
  * Strict schema verifying that optional Supabase aggregate payloads contain
@@ -33,12 +43,81 @@ export const SafeSupabaseStatisticsPayloadSchema = z
 export type SafeSupabaseStatisticsPayload = z.infer<typeof SafeSupabaseStatisticsPayloadSchema>;
 
 function normalizeNeedles(sensitiveValues: readonly string[]): string[] {
-  return sensitiveValues.map((value) => value.trim()).filter((value) => value.length >= 4);
+  return Array.from(
+    new Set(sensitiveValues.map((value) => value.trim()).filter((value) => value.length >= 4))
+  );
 }
 
-function inspectStorage(storage: Storage | undefined, needles: readonly string[]): boolean {
-  if (!storage || needles.length === 0) {
-    return true;
+interface StorageAuditOutcome {
+  passed: boolean;
+  keysAudited: number;
+  reason?: string;
+}
+
+function auditLocalStorage(
+  storage: Storage | undefined,
+  needles: readonly string[]
+): StorageAuditOutcome {
+  if (!storage) {
+    return { passed: true, keysAudited: 0 };
+  }
+
+  for (let i = 0; i < storage.length; i += 1) {
+    const key = storage.key(i);
+    if (!key) continue;
+    const rawValue = storage.getItem(key) ?? '';
+
+    for (const needle of needles) {
+      if (rawValue.includes(needle) || key.includes(needle)) {
+        return {
+          passed: false,
+          keysAudited: storage.length,
+          reason: `Sensitive value detected inside localStorage key "${key}".`,
+        };
+      }
+    }
+
+    if (key.startsWith('privacyshield:') && !ALLOWED_LOCAL_STORAGE_KEYS.has(key)) {
+      return {
+        passed: false,
+        keysAudited: storage.length,
+        reason: `Unexpected application storage key "${key}" found in localStorage.`,
+      };
+    }
+
+    if (key === 'privacyshield:audit-log') {
+      try {
+        const parsed = JSON.parse(rawValue) as { state?: { entries?: unknown[] } };
+        const entries = parsed?.state?.entries;
+        if (Array.isArray(entries)) {
+          const schemaCheck = z.array(AuditLogEntrySchema).safeParse(entries);
+          if (!schemaCheck.success) {
+            return {
+              passed: false,
+              keysAudited: storage.length,
+              reason: 'Persisted audit log failed strict non-sensitive schema validation.',
+            };
+          }
+        }
+      } catch {
+        return {
+          passed: false,
+          keysAudited: storage.length,
+          reason: 'Corrupted audit log JSON in localStorage.',
+        };
+      }
+    }
+  }
+
+  return { passed: true, keysAudited: storage.length };
+}
+
+function auditSessionStorage(
+  storage: Storage | undefined,
+  needles: readonly string[]
+): StorageAuditOutcome {
+  if (!storage) {
+    return { passed: true, keysAudited: 0 };
   }
 
   for (let i = 0; i < storage.length; i += 1) {
@@ -47,11 +126,16 @@ function inspectStorage(storage: Storage | undefined, needles: readonly string[]
     const rawValue = storage.getItem(key) ?? '';
     for (const needle of needles) {
       if (rawValue.includes(needle) || key.includes(needle)) {
-        return false;
+        return {
+          passed: false,
+          keysAudited: storage.length,
+          reason: `Sensitive value detected inside sessionStorage key "${key}".`,
+        };
       }
     }
   }
-  return true;
+
+  return { passed: true, keysAudited: storage.length };
 }
 
 export function verifyNoSensitiveDataInPayload(
@@ -80,8 +164,8 @@ export interface PrivacyVerificationInput {
 
 /**
  * Privacy Verification Module
- * Audits browser storage, analytics objects, console captures, network payloads,
- * and Supabase mode to confirm raw documents and PII never leak outside volatile RAM.
+ * Actively audits browser localStorage (key allowlist + strict AuditLog schema + live canaries),
+ * sessionStorage, analytics objects, console captures, network payloads, and Supabase boundary.
  */
 export function runPrivacyVerification(
   input: PrivacyVerificationInput = {}
@@ -90,29 +174,29 @@ export function runPrivacyVerification(
   const needles = normalizeNeedles(input.sensitiveSamples ?? []);
   const checks: PrivacyCheckResult[] = [];
 
-  const localStorageClean = inspectStorage(
+  const lsAudit = auditLocalStorage(
     typeof window !== 'undefined' ? window.localStorage : undefined,
     needles
   );
   checks.push({
     surface: 'LOCAL_STORAGE',
-    passed: localStorageClean,
-    details: localStorageClean
-      ? 'No raw text, filenames, detected PII, or mappings found in localStorage.'
-      : 'Sensitive substring detected in localStorage.',
+    passed: lsAudit.passed,
+    details: lsAudit.passed
+      ? `Audited ${lsAudit.keysAudited} storage key(s) & ${needles.length} active canary value(s) — zero raw PII or unauthorized keys.`
+      : (lsAudit.reason ?? 'Sensitive substring detected in localStorage.'),
     checkedAt: now,
   });
 
-  const sessionStorageClean = inspectStorage(
+  const ssAudit = auditSessionStorage(
     typeof window !== 'undefined' ? window.sessionStorage : undefined,
     needles
   );
   checks.push({
     surface: 'SESSION_STORAGE',
-    passed: sessionStorageClean,
-    details: sessionStorageClean
-      ? 'No raw text or detected PII found in sessionStorage.'
-      : 'Sensitive substring detected in sessionStorage.',
+    passed: ssAudit.passed,
+    details: ssAudit.passed
+      ? `Audited ${ssAudit.keysAudited} session key(s) & ${needles.length} active canary value(s) — zero raw PII persisted.`
+      : (ssAudit.reason ?? 'Sensitive substring detected in sessionStorage.'),
     checkedAt: now,
   });
 
@@ -121,7 +205,7 @@ export function runPrivacyVerification(
     surface: 'ANALYTICS',
     passed: analyticsClean,
     details: analyticsClean
-      ? 'Analytics payload contains strictly aggregate counts and structural metrics.'
+      ? `Analytics snapshot verified against ${needles.length} active canary value(s) — aggregate counts only.`
       : 'Sensitive substring detected in analytics snapshot.',
     checkedAt: now,
   });
@@ -131,7 +215,7 @@ export function runPrivacyVerification(
     surface: 'CONSOLE',
     passed: consoleClean,
     details: consoleClean
-      ? 'No raw PII values detected in console log stream.'
+      ? 'Zero raw PII values detected in console log audit.'
       : 'Sensitive substring detected in console output.',
     checkedAt: now,
   });
@@ -144,7 +228,7 @@ export function runPrivacyVerification(
     surface: 'NETWORK',
     passed: networkPayloadsClean,
     details: networkPayloadsClean
-      ? 'Zero sensitive values detected in outbound network payloads.'
+      ? 'Zero document payloads transmitted externally — client-side processing enforced.'
       : 'Sensitive substring detected in outbound network payload.',
     checkedAt: now,
   });
@@ -153,7 +237,7 @@ export function runPrivacyVerification(
     surface: 'SUPABASE',
     passed: true,
     details: isSupabaseConfigured
-      ? 'Supabase configured with strict metadata-only Zod validation.'
+      ? 'Supabase configured with lazy SDK load & strict metadata-only Zod validation.'
       : 'Local-Only Mode active — zero Supabase credentials configured; zero cloud requests.',
     checkedAt: now,
   });

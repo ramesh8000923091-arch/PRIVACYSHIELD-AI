@@ -36,6 +36,7 @@ import { SectionHeader } from '@/components/common/SectionHeader';
 import { LIMITS, PII_CATEGORY_LIST } from '@/constants';
 import { isSupabaseConfigured } from '@/services/supabase';
 import { useAuditLogStore } from '@/store';
+import type { PIIType } from '@/types';
 
 const PROBLEM_CARDS = [
   {
@@ -134,8 +135,8 @@ const SECURITY_GUARANTEES = [
   },
 ] as const;
 
-const CATEGORY_EXAMPLES: Record<string, { before: string; after: string }> = {
-  EMAIL: { before: 'anuj@example.com', after: 'an**@example.com' },
+const CATEGORY_EXAMPLES: Record<PIIType, { before: string; after: string }> = {
+  EMAIL: { before: 'anuj@example.com', after: 'an****@example.com' },
   PHONE: { before: '+91 9876543210', after: 'XXXXXX3210' },
   IP_ADDRESS: { before: '192.168.42.19', after: '192.168.xxx.xxx' },
   PAN: { before: 'ABCPK1234F', after: 'XXXXX1234X' },
@@ -153,9 +154,9 @@ export function HomePage() {
     const id = location.hash.replace('#', '');
     const target = document.getElementById(id);
     if (target) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      target.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'start' });
     }
-  }, [location.hash]);
+  }, [location.hash, prefersReducedMotion]);
 
   const realStats = useMemo(() => {
     const localSanitizations = auditEntries.filter(
@@ -196,7 +197,9 @@ export function HomePage() {
   }, [auditEntries]);
 
   function scrollToFeatures() {
-    document.getElementById('features')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document
+      .getElementById('features')
+      ?.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'start' });
   }
 
   const fadeUp = prefersReducedMotion
@@ -227,7 +230,7 @@ export function HomePage() {
 
             <h1 className="text-4xl font-extrabold leading-[1.1] tracking-tight text-text-primary sm:text-5xl">
               Your Data. Your Privacy.{' '}
-              <span className="bg-gradient-to-r from-brand-primary to-brand-secondary bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-brand-primary to-brand-secondary bg-clip-text text-transparent dark:from-blue-400 dark:to-violet-400">
                 Our Priority.
               </span>
             </h1>
@@ -476,7 +479,7 @@ export function HomePage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
             <div>
-              <span className="font-mono text-xs font-semibold uppercase tracking-widest text-brand-primary">
+              <span className="font-mono text-xs font-semibold uppercase tracking-widest text-brand-primary dark:text-blue-400">
                 Transparent Application Telemetry
               </span>
               <h2 className="mt-1 text-2xl font-bold tracking-tight text-text-primary">

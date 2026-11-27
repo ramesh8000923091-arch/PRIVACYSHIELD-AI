@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowRight, Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui';
@@ -21,16 +21,31 @@ const LANDING_LINKS: readonly NavTarget[] = [
 
 export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
 
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        setMobileMenuOpen(false);
+        menuButtonRef.current?.focus();
+      }
+    }
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [mobileMenuOpen]);
+
   function handleNavClick(target: NavTarget) {
     setMobileMenuOpen(false);
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const behavior: ScrollBehavior = reduced ? 'auto' : 'smooth';
 
     if (target.sectionId) {
       if (location.pathname === '/') {
-        const element = document.getElementById(target.sectionId);
-        element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        navigate(`/#${target.sectionId}`, { replace: true });
+        document.getElementById(target.sectionId)?.scrollIntoView({ behavior, block: 'start' });
         return;
       }
       navigate(`/#${target.sectionId}`);
@@ -38,7 +53,10 @@ export function Navbar() {
     }
 
     if (target.to === '/' && location.pathname === '/') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (location.hash) {
+        navigate('/', { replace: true });
+      }
+      window.scrollTo({ top: 0, behavior });
       return;
     }
 
@@ -55,7 +73,7 @@ export function Navbar() {
         >
           <img src="/logo.svg" alt="" className="h-7 w-7 shrink-0" />
           <span className="text-base font-bold text-text-primary">
-            PrivacyShield <span className="text-brand-primary">AI</span>
+            PrivacyShield <span className="text-brand-primary dark:text-blue-400">AI</span>
           </span>
         </Link>
 
@@ -64,16 +82,17 @@ export function Navbar() {
             const isActive =
               item.to === '/'
                 ? location.pathname === '/' && !location.hash
-                : location.hash === `#${item.sectionId}`;
+                : location.pathname === '/' && location.hash === `#${item.sectionId}`;
             return (
               <button
                 key={item.label}
                 type="button"
+                aria-current={isActive ? 'page' : undefined}
                 onClick={() => handleNavClick(item)}
                 className={cn(
                   'whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer',
                   isActive
-                    ? 'bg-brand-primary/15 text-brand-primary'
+                    ? 'bg-brand-primary/15 text-brand-primary dark:text-blue-400'
                     : 'text-text-secondary hover:bg-bg-elevated hover:text-text-primary'
                 )}
               >
@@ -83,14 +102,27 @@ export function Navbar() {
           })}
           <Link
             to="/history"
+            aria-current={location.pathname === '/history' ? 'page' : undefined}
             className={cn(
               'whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
               location.pathname === '/history'
-                ? 'bg-brand-primary/15 text-brand-primary'
+                ? 'bg-brand-primary/15 text-brand-primary dark:text-blue-400'
                 : 'text-text-secondary hover:bg-bg-elevated hover:text-text-primary'
             )}
           >
             Activity Log
+          </Link>
+          <Link
+            to="/about"
+            aria-current={location.pathname === '/about' ? 'page' : undefined}
+            className={cn(
+              'whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+              location.pathname === '/about'
+                ? 'bg-brand-primary/15 text-brand-primary dark:text-blue-400'
+                : 'text-text-secondary hover:bg-bg-elevated hover:text-text-primary'
+            )}
+          >
+            Privacy Audit
           </Link>
         </nav>
 
@@ -104,6 +136,7 @@ export function Navbar() {
             </Link>
           </Button>
           <Button
+            ref={menuButtonRef}
             type="button"
             variant="outline"
             size="icon"
@@ -140,17 +173,29 @@ export function Navbar() {
             ))}
             <Link
               to="/history"
+              aria-current={location.pathname === '/history' ? 'page' : undefined}
               onClick={() => setMobileMenuOpen(false)}
-              className="rounded-lg px-3 py-2.5 text-sm font-medium text-text-secondary transition-colors hover:bg-bg-elevated hover:text-text-primary"
+              className={cn(
+                'rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                location.pathname === '/history'
+                  ? 'bg-brand-primary/15 text-brand-primary dark:text-blue-400'
+                  : 'text-text-secondary hover:bg-bg-elevated hover:text-text-primary'
+              )}
             >
               Activity Log
             </Link>
             <Link
               to="/about"
+              aria-current={location.pathname === '/about' ? 'page' : undefined}
               onClick={() => setMobileMenuOpen(false)}
-              className="rounded-lg px-3 py-2.5 text-sm font-medium text-text-secondary transition-colors hover:bg-bg-elevated hover:text-text-primary"
+              className={cn(
+                'rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                location.pathname === '/about'
+                  ? 'bg-brand-primary/15 text-brand-primary dark:text-blue-400'
+                  : 'text-text-secondary hover:bg-bg-elevated hover:text-text-primary'
+              )}
             >
-              Privacy Architecture
+              Privacy Audit
             </Link>
           </nav>
           <div className="mt-4 flex flex-col gap-3 border-t border-border-subtle pt-4">

@@ -37,7 +37,7 @@ test.describe('Phase 3 — Landing Page, Interactivity, Theme & Accessibility', 
     await page.getByRole('tab', { name: 'Full Mask', exact: true }).first().click();
     await expect(heroSanitized).toContainText('[REDACTED_EMAIL]');
     await page.getByRole('tab', { name: 'Partial', exact: true }).click();
-    await expect(heroSanitized).toContainText('pr**@example.com');
+    await expect(heroSanitized).toContainText('pr****@example.com');
     await page.getByRole('button', { name: 'Server Log' }).click();
     await expect(heroSanitized).toContainText('2001:0db8:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx');
 
@@ -55,7 +55,7 @@ test.describe('Phase 3 — Landing Page, Interactivity, Theme & Accessibility', 
     const archSection = page.locator('#architecture');
     await archSection.scrollIntoViewIfNeeded();
     await archSection.getByRole('button', { name: /Re-run Privacy Check/i }).click();
-    await expect(archSection.getByText('VERIFIED')).toBeVisible();
+    await expect(archSection.getByText('VERIFIED', { exact: true })).toBeVisible();
 
     // FAQ accordion interaction
     const faqSection = page.locator('#faq');

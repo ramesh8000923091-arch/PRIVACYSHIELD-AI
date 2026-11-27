@@ -20,10 +20,11 @@ CREATE TABLE IF NOT EXISTS public.user_preferences (
 CREATE INDEX IF NOT EXISTS idx_user_preferences_user_id
   ON public.user_preferences(user_id);
 
--- Automatic updated_at trigger
+-- Automatic updated_at trigger (fixed search_path for security)
 CREATE OR REPLACE FUNCTION public.handle_updated_at()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SET search_path = ''
 AS $$
 BEGIN
   NEW.updated_at = now();
@@ -102,7 +103,7 @@ DROP POLICY IF EXISTS "Authenticated users can insert own statistics" ON public.
 CREATE POLICY "Authenticated users can insert own statistics"
   ON public.sanitization_statistics FOR INSERT
   TO authenticated
-  WITH CHECK (auth.uid() = user_id OR user_id IS NULL);
+  WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Consented anonymous aggregate inserts" ON public.sanitization_statistics;
 CREATE POLICY "Consented anonymous aggregate inserts"

@@ -32,17 +32,17 @@ export function CategoryControlsBar({
             title={`${enabled ? 'Disable' : 'Enable'} ${category.label} detection (${category.validationLabel})`}
             className={cn(
               'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-xs font-medium transition-opacity cursor-pointer',
-              !enabled && 'opacity-45 line-through'
+              !enabled && 'opacity-75 line-through'
             )}
             style={{
               color: category.colorVar.fg,
               backgroundColor: category.colorVar.bg,
-              border: `1px solid ${category.colorVar.border}`,
+              border: `1px ${enabled ? 'solid' : 'dashed'} ${category.colorVar.border}`,
             }}
           >
             <span>{category.shortLabel}</span>
-            <span className="rounded-full bg-bg-canvas/70 px-1.5 py-0.2 text-[10px] font-bold">
-              {count}
+            <span className="rounded-full bg-bg-canvas/80 px-1.5 py-0.5 text-[10px] font-bold">
+              {enabled ? count : 'OFF'}
             </span>
           </button>
         );

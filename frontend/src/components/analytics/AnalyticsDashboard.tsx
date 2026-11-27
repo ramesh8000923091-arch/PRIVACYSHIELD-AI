@@ -133,7 +133,11 @@ export function AnalyticsDashboard({
             </div>
           </CardHeader>
           <CardContent>
-            <div className="h-64 min-h-[256px] w-full min-w-[200px]">
+            <div
+              role="img"
+              aria-label="Detected entities bar chart by PII category"
+              className="h-64 min-h-[256px] w-full min-w-[200px]"
+            >
               <ResponsiveContainer
                 width="100%"
                 height="100%"

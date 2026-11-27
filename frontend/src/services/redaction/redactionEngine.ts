@@ -54,7 +54,9 @@ export function applyRedaction(
   }
 
   const mapper = sharedMapper ?? new PseudonymMapper();
-  const sorted = [...entities].sort((a, b) => a.start - b.start);
+  const sorted = [...entities]
+    .filter((e) => e.start >= 0 && e.end > e.start && e.end <= originalText.length)
+    .sort((a, b) => a.start - b.start || b.end - b.start - (a.end - a.start));
 
   const outputParts: string[] = [];
   const appliedRedactions: AppliedRedaction[] = [];
@@ -67,7 +69,7 @@ export function applyRedaction(
   let segmentIndex = 0;
 
   for (const entity of sorted) {
-    if (entity.start < cursor || entity.end > originalText.length) {
+    if (entity.start < cursor) {
       continue;
     }
 

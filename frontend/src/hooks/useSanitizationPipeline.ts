@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { SAMPLE_CSV_TEXT, SAMPLE_DOCUMENT_TEXT } from '@/constants';
-import { parseCsvContent, sanitizeCsvDocument } from '@/services/csv';
-import { countEntitiesByCategory, detectPIIAsync } from '@/services/detection';
-import { applyRedaction, PseudonymMapper } from '@/services/redaction';
+import { parseCsvContent, redactCsvDocument } from '@/services/csv';
+import { countEntitiesByCategory, detectCsvAsync, detectPIIAsync } from '@/services/detection';
+import { applyRedaction, PseudonymMapper, type RestoreResult } from '@/services/redaction';
+import { submitConsentedAggregateStats } from '@/services/supabase';
 import { useAuditLogStore, usePreferencesStore, useWorkspaceStore } from '@/store';
 import type {
   DetectionAnalytics,
@@ -10,7 +11,11 @@ import type {
   ParsedCsvDocument,
   RedactionMode,
 } from '@/types';
-import { containsBinaryNullBytes, validateUploadedFile } from '@/utils/fileValidation';
+import {
+  containsBinaryNullBytes,
+  validateUploadedFile,
+  validateUtf8TextBytes,
+} from '@/utils/fileValidation';
 import { countWords } from '@/utils/formatters';
 
 export interface ToastMessage {
@@ -19,20 +24,37 @@ export interface ToastMessage {
   tone: 'success' | 'info' | 'error';
 }
 
+/**
+ * Volatile RAM-only singleton mapper kept in JS memory (never persisted to storage).
+ * Survives SPA navigation when the user explicitly opts in to cross-document retention,
+ * and is purged immediately on clear, reset, disabling retention, or tab close.
+ */
+const volatileSessionMapper = new PseudonymMapper();
+
+export function resetVolatileSessionMapper(): void {
+  volatileSessionMapper.reset();
+}
+
 export function useSanitizationPipeline() {
-  const mapperRef = useRef<PseudonymMapper>(new PseudonymMapper());
   const abortControllerRef = useRef<AbortController | null>(null);
+  const debounceTimerRef = useRef<number | null>(null);
   const toastTimerRef = useRef<number | null>(null);
-  const lastProcessedTextRef = useRef<string>('');
+  const uploadSeqRef = useRef(0);
+  const lastAuditedTextRef = useRef<string>('');
+
   const [scanNonce, setScanNonce] = useState(0);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [sanitizedCsvRows, setSanitizedCsvRows] = useState<string[][]>([]);
-  const [mappingCount, setMappingCount] = useState(0);
+  const [redactedCellKeys, setRedactedCellKeys] = useState<Set<string>>(new Set());
+  const [excludedCellKeys, setExcludedCellKeys] = useState<Set<string>>(new Set());
+  const [mappingCount, setMappingCount] = useState(() => volatileSessionMapper.getTotalMappings());
 
   const enabledCategories = usePreferencesStore((s) => s.enabledCategories);
   const retainMappingsAcrossDocuments = usePreferencesStore((s) => s.retainMappingsAcrossDocuments);
+  const telemetryConsent = usePreferencesStore((s) => s.telemetryConsent);
 
   const rawText = useWorkspaceStore((s) => s.rawText);
+  const scannedText = useWorkspaceStore((s) => s.scannedText);
   const inputSource = useWorkspaceStore((s) => s.inputSource);
   const uploadedFile = useWorkspaceStore((s) => s.uploadedFile);
   const parsedCsv = useWorkspaceStore((s) => s.parsedCsv);
@@ -49,6 +71,7 @@ export function useSanitizationPipeline() {
   const mappingVersion = useWorkspaceStore((s) => s.mappingVersion);
 
   const setRawText = useWorkspaceStore((s) => s.setRawText);
+  const setDocumentWithFile = useWorkspaceStore((s) => s.setDocumentWithFile);
   const setUploadedFile = useWorkspaceStore((s) => s.setUploadedFile);
   const setDetectionResults = useWorkspaceStore((s) => s.setDetectionResults);
   const setRedactionOutput = useWorkspaceStore((s) => s.setRedactionOutput);
@@ -67,8 +90,27 @@ export function useSanitizationPipeline() {
       if (toastTimerRef.current !== null) {
         window.clearTimeout(toastTimerRef.current);
       }
+      if (debounceTimerRef.current !== null) {
+        window.clearTimeout(debounceTimerRef.current);
+      }
       abortControllerRef.current?.abort();
     };
+  }, []);
+
+  // Purge RAM mappings immediately whenever cross-document retention is disabled
+  useEffect(() => {
+    if (!retainMappingsAcrossDocuments) {
+      volatileSessionMapper.reset();
+      setMappingCount(0);
+    }
+  }, [retainMappingsAcrossDocuments]);
+
+  const dismissToast = useCallback(() => {
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+    setToast(null);
   }, []);
 
   const showToast = useCallback((text: string, tone: ToastMessage['tone'] = 'success') => {
@@ -83,84 +125,68 @@ export function useSanitizationPipeline() {
     }, 3500);
   }, []);
 
-  // Run detection whenever rawText, parsedCsv, or enabledCategories changes
+  // Effect 1: Detection (sync for small inputs, isolated Web Worker for >= 50KB or > 500 CSV rows)
   useEffect(() => {
+    if (debounceTimerRef.current !== null) {
+      window.clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    abortControllerRef.current?.abort();
+
     if (!rawText) {
-      setDetectionResults([], null);
+      if (!retainMappingsAcrossDocuments) {
+        volatileSessionMapper.reset();
+        setMappingCount(0);
+      }
+      setDetectionResults([], null, '');
       setRedactionOutput('', []);
       setSanitizedCsvRows([]);
+      setRedactedCellKeys(new Set());
+      setExcludedCellKeys(new Set());
       setProcessing(false, 0);
+      lastAuditedTextRef.current = '';
       return;
     }
 
-    abortControllerRef.current?.abort();
     const controller = new AbortController();
     abortControllerRef.current = controller;
-
     let cancelled = false;
-    const isNewDocument = rawText !== lastProcessedTextRef.current;
+    const isNewDocument = rawText !== lastAuditedTextRef.current;
+
+    // Immediately lock exports while debounced re-scan (e.g. category toggle) is pending
+    setProcessing(true, 10);
 
     async function runScan() {
-      setProcessing(true, 10);
-      setErrorMessage(null);
+      if (cancelled || controller.signal.aborted) return;
+      setProcessing(true, 20);
+      if (!useWorkspaceStore.getState().errorMessage?.startsWith('CSV syntax warning')) {
+        setErrorMessage(null);
+      }
 
       try {
-        if (parsedCsv) {
-          const startedAt = performance.now();
-          const tempMapper = new PseudonymMapper();
-          const csvPreview = sanitizeCsvDocument(
-            parsedCsv,
-            { enabledCategories },
-            {
-              mode: useWorkspaceStore.getState().redactionMode,
-              fullMaskVariant: useWorkspaceStore.getState().fullMaskVariant,
-              excludedEntityIds: new Set(),
-            },
-            tempMapper
-          );
-          if (cancelled) return;
-
-          const durationMs = Math.max(0, Number((performance.now() - startedAt).toFixed(2)));
-          const nextAnalytics: DetectionAnalytics = {
-            totalDetected: csvPreview.entities.length,
-            totalRedacted: csvPreview.redactedCount,
-            totalExcluded: 0,
-            countsByCategory: csvPreview.countsByCategory,
-            originalCharCount: rawText.length,
-            sanitizedCharCount: csvPreview.sanitizedCsvText.length,
-            originalWordCount: countWords(rawText),
-            sanitizedWordCount: countWords(csvPreview.sanitizedCsvText),
-            processingTimeMs: durationMs,
-            usedWorker: false,
-            isSanitized: true,
-          };
-
-          setDetectionResults(csvPreview.entities, nextAnalytics);
-          setProcessing(false, 100);
-          if (isNewDocument) {
-            lastProcessedTextRef.current = rawText;
-            addAuditEntry({
-              action: 'SANITIZATION_COMPLETED',
-              detectedCount: csvPreview.entities.length,
-              redactedCount: csvPreview.redactedCount,
-              redactionMode: useWorkspaceStore.getState().redactionMode,
-              status: 'SUCCESS',
-              note: 'CSV cell-level scan and sanitization completed locally',
+        const summary = parsedCsv
+          ? await detectCsvAsync({
+              csvDoc: parsedCsv,
+              options: { enabledCategories },
+              signal: controller.signal,
+              onProgress: (percent) => {
+                if (!cancelled && !controller.signal.aborted) {
+                  setProcessing(true, Math.max(20, percent));
+                }
+              },
+            })
+          : await detectPIIAsync({
+              text: rawText,
+              options: { enabledCategories },
+              signal: controller.signal,
+              onProgress: (percent) => {
+                if (!cancelled && !controller.signal.aborted) {
+                  setProcessing(true, Math.max(20, percent));
+                }
+              },
             });
-          }
-          return;
-        }
 
-        const summary = await detectPIIAsync({
-          text: rawText,
-          options: { enabledCategories },
-          signal: controller.signal,
-          onProgress: (percent) => {
-            if (!cancelled) setProcessing(true, percent);
-          },
-        });
-
-        if (cancelled) return;
+        if (cancelled || controller.signal.aborted) return;
 
         const nextAnalytics: DetectionAnalytics = {
           totalDetected: summary.totalDetected,
@@ -176,24 +202,34 @@ export function useSanitizationPipeline() {
           isSanitized: true,
         };
 
-        setDetectionResults(summary.entities, nextAnalytics);
+        setDetectionResults(summary.entities, nextAnalytics, rawText);
         setProcessing(false, 100);
 
         if (isNewDocument) {
-          lastProcessedTextRef.current = rawText;
+          lastAuditedTextRef.current = rawText;
+          const activeMode = useWorkspaceStore.getState().redactionMode;
           addAuditEntry({
             action: 'SANITIZATION_COMPLETED',
             detectedCount: summary.totalDetected,
             redactedCount: summary.totalDetected,
-            redactionMode: useWorkspaceStore.getState().redactionMode,
+            redactionMode: activeMode,
             status: 'SUCCESS',
             note: summary.usedWorker
-              ? 'Processed in isolated browser Web Worker'
-              : 'Processed synchronously in browser RAM',
+              ? parsedCsv
+                ? 'CSV processed in isolated browser Web Worker'
+                : 'Processed in isolated browser Web Worker'
+              : parsedCsv
+                ? 'CSV cell-level scan completed in browser RAM'
+                : 'Processed synchronously in browser RAM',
           });
+
+          if (telemetryConsent) {
+            void submitConsentedAggregateStats(nextAnalytics, activeMode, true);
+          }
         }
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') {
+          if (!cancelled) setProcessing(false, 0);
           return;
         }
         if (!cancelled) {
@@ -203,10 +239,17 @@ export function useSanitizationPipeline() {
       }
     }
 
-    const timer = window.setTimeout(runScan, 120);
+    debounceTimerRef.current = window.setTimeout(() => {
+      debounceTimerRef.current = null;
+      void runScan();
+    }, 120);
+
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
+      if (debounceTimerRef.current !== null) {
+        window.clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
       controller.abort();
     };
   }, [
@@ -214,6 +257,8 @@ export function useSanitizationPipeline() {
     parsedCsv,
     enabledCategories,
     scanNonce,
+    retainMappingsAcrossDocuments,
+    telemetryConsent,
     setDetectionResults,
     setRedactionOutput,
     setProcessing,
@@ -221,53 +266,40 @@ export function useSanitizationPipeline() {
     addAuditEntry,
   ]);
 
-  // Apply redaction reactively whenever entities, mode, variant, exclusions, or mappingVersion change
+  // Effect 2: Redaction (runs ONLY once `scannedText === rawText` and `!isProcessing`, preventing stale leaks!)
   useEffect(() => {
     if (!rawText) {
-      setRedactionOutput('', []);
-      setSanitizedCsvRows([]);
-      setMappingCount(mapperRef.current.getTotalMappings());
+      return;
+    }
+    if (isProcessing || scannedText !== rawText) {
       return;
     }
 
     if (!retainMappingsAcrossDocuments) {
-      mapperRef.current.reset();
+      volatileSessionMapper.reset();
     }
 
     if (parsedCsv) {
-      const csvResult = sanitizeCsvDocument(
+      const csvResult = redactCsvDocument(
         parsedCsv,
-        { enabledCategories },
+        entities,
         { mode: redactionMode, fullMaskVariant, excludedEntityIds },
-        mapperRef.current
+        volatileSessionMapper
       );
 
       setSanitizedCsvRows(csvResult.sanitizedRows);
-
-      // Build plain diff segments on raw text lines for unified SideBySideDiff viewing
-      const rawLineDiff = applyRedaction(rawText, [], {
-        mode: redactionMode,
-        fullMaskVariant,
-        excludedEntityIds,
+      setRedactedCellKeys(csvResult.redactedCellKeys);
+      setExcludedCellKeys(csvResult.excludedCellKeys);
+      setRedactionOutput(csvResult.sanitizedCsvText, csvResult.diffSegments, {
+        totalDetected: entities.length,
+        totalRedacted: csvResult.redactedCount,
+        totalExcluded: csvResult.excludedCount,
+        countsByCategory: csvResult.countsByCategory,
+        sanitizedCharCount: csvResult.sanitizedCsvText.length,
+        sanitizedWordCount: countWords(csvResult.sanitizedCsvText),
+        isSanitized: csvResult.redactedCount > 0 || entities.length === 0,
       });
-      setRedactionOutput(csvResult.sanitizedCsvText, rawLineDiff.diffSegments);
-      setMappingCount(mapperRef.current.getTotalMappings());
-
-      const currentAnalytics = useWorkspaceStore.getState().analytics;
-      if (currentAnalytics) {
-        useWorkspaceStore.setState({
-          analytics: {
-            ...currentAnalytics,
-            totalDetected: csvResult.entities.length,
-            totalRedacted: csvResult.redactedCount,
-            totalExcluded: csvResult.excludedCount,
-            countsByCategory: csvResult.countsByCategory,
-            sanitizedCharCount: csvResult.sanitizedCsvText.length,
-            sanitizedWordCount: countWords(csvResult.sanitizedCsvText),
-            isSanitized: csvResult.redactedCount > 0 || csvResult.entities.length === 0,
-          },
-        });
-      }
+      setMappingCount(volatileSessionMapper.getTotalMappings());
       return;
     }
 
@@ -275,49 +307,45 @@ export function useSanitizationPipeline() {
       rawText,
       entities,
       { mode: redactionMode, fullMaskVariant, excludedEntityIds },
-      mapperRef.current
+      volatileSessionMapper
     );
 
     setSanitizedCsvRows([]);
-    setRedactionOutput(output.sanitizedText, output.diffSegments);
-    setMappingCount(mapperRef.current.getTotalMappings());
-
-    const currentAnalytics = useWorkspaceStore.getState().analytics;
-    if (currentAnalytics) {
-      useWorkspaceStore.setState({
-        analytics: {
-          ...currentAnalytics,
-          totalDetected: entities.length,
-          totalRedacted: output.redactedCount,
-          totalExcluded: output.excludedCount,
-          countsByCategory: countEntitiesByCategory(entities),
-          originalCharCount: rawText.length,
-          sanitizedCharCount: output.sanitizedText.length,
-          originalWordCount: countWords(rawText),
-          sanitizedWordCount: countWords(output.sanitizedText),
-          isSanitized: output.redactedCount > 0 || entities.length === 0,
-        },
-      });
-    }
+    setRedactedCellKeys(new Set());
+    setExcludedCellKeys(new Set());
+    setRedactionOutput(output.sanitizedText, output.diffSegments, {
+      totalDetected: entities.length,
+      totalRedacted: output.redactedCount,
+      totalExcluded: output.excludedCount,
+      countsByCategory: countEntitiesByCategory(entities),
+      originalCharCount: rawText.length,
+      sanitizedCharCount: output.sanitizedText.length,
+      originalWordCount: countWords(rawText),
+      sanitizedWordCount: countWords(output.sanitizedText),
+      isSanitized: output.redactedCount > 0 || entities.length === 0,
+    });
+    setMappingCount(volatileSessionMapper.getTotalMappings());
   }, [
     rawText,
+    scannedText,
+    isProcessing,
     parsedCsv,
     entities,
     redactionMode,
     fullMaskVariant,
     excludedEntityIds,
-    enabledCategories,
     retainMappingsAcrossDocuments,
     mappingVersion,
     setRedactionOutput,
   ]);
 
   const loadSampleText = useCallback(() => {
+    uploadSeqRef.current += 1;
     if (!retainMappingsAcrossDocuments) {
-      mapperRef.current.reset();
+      volatileSessionMapper.reset();
+      setMappingCount(0);
     }
-    setUploadedFile(null, null);
-    setRawText(SAMPLE_DOCUMENT_TEXT, 'SAMPLE');
+    setDocumentWithFile(SAMPLE_DOCUMENT_TEXT, 'SAMPLE', null, null);
     addAuditEntry({
       action: 'SAMPLE_DATA_LOADED',
       redactionMode: useWorkspaceStore.getState().redactionMode,
@@ -325,27 +353,27 @@ export function useSanitizationPipeline() {
       note: 'Loaded synthetic multi-category test document',
     });
     showToast('Loaded synthetic sample document with all 6 PII categories.');
-  }, [retainMappingsAcrossDocuments, setUploadedFile, setRawText, addAuditEntry, showToast]);
+  }, [retainMappingsAcrossDocuments, setDocumentWithFile, addAuditEntry, showToast]);
 
   const loadSampleCsv = useCallback(() => {
+    uploadSeqRef.current += 1;
     if (!retainMappingsAcrossDocuments) {
-      mapperRef.current.reset();
+      volatileSessionMapper.reset();
+      setMappingCount(0);
     }
-    const parsed = parseCsvContent(
+    const byteLength = new TextEncoder().encode(SAMPLE_CSV_TEXT).byteLength;
+    const parsed = parseCsvContent(SAMPLE_CSV_TEXT, 'synthetic-customers.csv', byteLength);
+    setDocumentWithFile(
       SAMPLE_CSV_TEXT,
-      'synthetic-customers.csv',
-      SAMPLE_CSV_TEXT.length
-    );
-    setUploadedFile(
+      'CSV_FILE',
       {
         name: 'synthetic-customers.csv',
-        sizeBytes: SAMPLE_CSV_TEXT.length,
+        sizeBytes: byteLength,
         extension: '.csv',
         mimeType: 'text/csv',
       },
       parsed.document
     );
-    setRawText(SAMPLE_CSV_TEXT, 'CSV_FILE');
     addAuditEntry({
       action: 'SAMPLE_DATA_LOADED',
       redactionMode: useWorkspaceStore.getState().redactionMode,
@@ -353,7 +381,7 @@ export function useSanitizationPipeline() {
       note: 'Loaded synthetic customer CSV dataset',
     });
     showToast('Loaded synthetic CSV dataset (preserving quoted fields & columns).');
-  }, [retainMappingsAcrossDocuments, setUploadedFile, setRawText, addAuditEntry, showToast]);
+  }, [retainMappingsAcrossDocuments, setDocumentWithFile, addAuditEntry, showToast]);
 
   const handleFileUpload = useCallback(
     async (file: File) => {
@@ -364,11 +392,24 @@ export function useSanitizationPipeline() {
         return;
       }
 
-      setProcessing(true, 20);
+      const currentSeq = ++uploadSeqRef.current;
+      setProcessing(true, 10);
       setErrorMessage(null);
 
       try {
+        const binaryCheck = await validateUtf8TextBytes(file);
+        if (currentSeq !== uploadSeqRef.current) return;
+        if (!binaryCheck.valid) {
+          setProcessing(false, 0);
+          const msg = binaryCheck.error ?? 'Unsupported binary content.';
+          setErrorMessage(msg);
+          showToast(msg, 'error');
+          return;
+        }
+
         const text = await file.text();
+        if (currentSeq !== uploadSeqRef.current) return;
+
         if (containsBinaryNullBytes(text)) {
           setProcessing(false, 0);
           const msg = 'File appears to contain binary data and cannot be processed as text.';
@@ -378,19 +419,26 @@ export function useSanitizationPipeline() {
         }
 
         if (!retainMappingsAcrossDocuments) {
-          mapperRef.current.reset();
+          volatileSessionMapper.reset();
+          setMappingCount(0);
         }
 
         let csvDoc: ParsedCsvDocument | null = null;
         let sourceType: InputSourceType = 'TXT_FILE';
+        let csvWarningNote: string | null = null;
 
         if (validation.extension === '.csv') {
           const parsed = parseCsvContent(text, file.name, file.size);
           csvDoc = parsed.document;
           sourceType = 'CSV_FILE';
+          if (parsed.warnings.length > 0) {
+            csvWarningNote = `CSV syntax warning (${parsed.warnings[0]}). Verify table alignment before export.`;
+          }
         }
 
-        setUploadedFile(
+        setDocumentWithFile(
+          text,
+          sourceType,
           {
             name: file.name,
             sizeBytes: file.size,
@@ -399,16 +447,25 @@ export function useSanitizationPipeline() {
           },
           csvDoc
         );
-        setRawText(text, sourceType);
+
+        if (csvWarningNote) {
+          setErrorMessage(csvWarningNote);
+        }
 
         addAuditEntry({
           action: 'FILE_SELECTED',
           redactionMode: useWorkspaceStore.getState().redactionMode,
-          status: 'SUCCESS',
-          note: `Loaded local ${validation.extension} file (${Math.ceil(file.size / 1024)} KB)`,
+          status: csvWarningNote ? 'WARNING' : 'SUCCESS',
+          note: `Loaded local ${validation.extension} file (${Math.max(1, Math.ceil(file.size / 1024))} KB)`,
         });
-        showToast(`Loaded ${file.name} locally in browser RAM.`);
+        showToast(
+          csvWarningNote
+            ? `Loaded ${file.name} with CSV formatting warnings.`
+            : `Loaded ${file.name} locally in browser RAM.`,
+          csvWarningNote ? 'info' : 'success'
+        );
       } catch {
+        if (currentSeq !== uploadSeqRef.current) return;
         setProcessing(false, 0);
         const msg = 'Unable to read the selected file locally.';
         setErrorMessage(msg);
@@ -419,8 +476,7 @@ export function useSanitizationPipeline() {
       retainMappingsAcrossDocuments,
       setErrorMessage,
       setProcessing,
-      setUploadedFile,
-      setRawText,
+      setDocumentWithFile,
       addAuditEntry,
       showToast,
     ]
@@ -441,7 +497,7 @@ export function useSanitizationPipeline() {
   );
 
   const handleResetMappings = useCallback(() => {
-    mapperRef.current.reset();
+    volatileSessionMapper.reset();
     bumpMappingVersion();
     setMappingCount(0);
     addAuditEntry({
@@ -454,11 +510,18 @@ export function useSanitizationPipeline() {
   }, [bumpMappingVersion, addAuditEntry, showToast]);
 
   const handleClearWorkspace = useCallback(() => {
+    uploadSeqRef.current += 1;
+    if (debounceTimerRef.current !== null) {
+      window.clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
     abortControllerRef.current?.abort();
-    mapperRef.current.reset();
-    lastProcessedTextRef.current = '';
+    volatileSessionMapper.reset();
+    lastAuditedTextRef.current = '';
     resetWorkspace();
     setSanitizedCsvRows([]);
+    setRedactedCellKeys(new Set());
+    setExcludedCellKeys(new Set());
     setMappingCount(0);
     addAuditEntry({
       action: 'WORKSPACE_CLEARED',
@@ -470,23 +533,38 @@ export function useSanitizationPipeline() {
 
   const runManualScan = useCallback(() => {
     if (!useWorkspaceStore.getState().rawText) return;
-    lastProcessedTextRef.current = '';
+    lastAuditedTextRef.current = '';
     setScanNonce((n) => n + 1);
     showToast('Re-scanned document locally in browser RAM.');
   }, [showToast]);
 
   const cancelProcessing = useCallback(() => {
+    uploadSeqRef.current += 1;
+    if (debounceTimerRef.current !== null) {
+      window.clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
     abortControllerRef.current?.abort();
     setProcessing(false, 0);
     showToast('Background scan cancelled.', 'info');
   }, [setProcessing, showToast]);
 
+  const restoreAiResponse = useCallback((pseudonymizedReply: string): RestoreResult => {
+    return volatileSessionMapper.restoreText(pseudonymizedReply);
+  }, []);
+
+  const isOutputReady =
+    !isProcessing && Boolean(sanitizedText) && Boolean(rawText) && scannedText === rawText;
+
   return {
     rawText,
+    scannedText,
     inputSource,
     uploadedFile,
     parsedCsv,
     sanitizedCsvRows,
+    redactedCellKeys,
+    excludedCellKeys,
     entities,
     excludedEntityIds,
     redactionMode,
@@ -495,12 +573,14 @@ export function useSanitizationPipeline() {
     diffSegments,
     analytics,
     isProcessing,
+    isOutputReady,
     progressPercent,
     errorMessage,
     mappingCount,
     toast,
     setRawText,
     setUploadedFile,
+    setErrorMessage,
     setFullMaskVariant,
     toggleEntityExclusion,
     loadSampleText,
@@ -511,6 +591,8 @@ export function useSanitizationPipeline() {
     handleClearWorkspace,
     runManualScan,
     cancelProcessing,
+    restoreAiResponse,
     showToast,
+    dismissToast,
   };
 }

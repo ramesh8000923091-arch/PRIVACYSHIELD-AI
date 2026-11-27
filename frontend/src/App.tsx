@@ -1,4 +1,5 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { AppShell } from '@/components/layout/AppShell';
 import { useTheme } from '@/hooks';
 import { AboutPage } from '@/pages/AboutPage';
@@ -11,15 +12,17 @@ export function AppRoutes() {
   useTheme();
 
   return (
-    <AppShell>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/workspace" element={<WorkspacePage />} />
-        <Route path="/history" element={<HistoryPage />} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
-    </AppShell>
+    <ErrorBoundary>
+      <AppShell>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/workspace" element={<WorkspacePage />} />
+          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </AppShell>
+    </ErrorBoundary>
   );
 }
 

@@ -51,7 +51,7 @@ describe('Phase 3 — Landing Page & Design System', () => {
     expect(sanitizedPane).toHaveTextContent('[REDACTED_EMAIL]');
 
     await user.click(preview.getByRole('tab', { name: /^Partial$/i }));
-    expect(sanitizedPane).toHaveTextContent('pr**@example.com');
+    expect(sanitizedPane).toHaveTextContent('pr****@example.com');
     expect(sanitizedPane).toHaveTextContent('192.168.xxx.xxx');
 
     await user.click(preview.getByRole('button', { name: 'Customer CSV' }));

@@ -12,7 +12,7 @@ export function Footer() {
             <Link to="/" className="inline-flex items-center gap-2.5 font-semibold tracking-tight">
               <img src="/logo.svg" alt="" className="h-7 w-7" />
               <span className="text-base font-bold text-text-primary">
-                PrivacyShield <span className="text-brand-primary">AI</span>
+                PrivacyShield <span className="text-brand-primary dark:text-blue-400">AI</span>
               </span>
             </Link>
             <p className="max-w-md text-sm leading-relaxed text-text-muted">
@@ -23,7 +23,10 @@ export function Footer() {
             <div className="flex flex-wrap items-center gap-2.5">
               <PrivacyBadge />
               <span className="inline-flex items-center gap-1.5 rounded-full border border-border-default bg-bg-elevated px-2.5 py-0.5 font-mono text-[11px] text-text-secondary">
-                <Lock className="h-3 w-3 text-brand-primary" aria-hidden="true" />
+                <Lock
+                  className="h-3 w-3 text-brand-primary dark:text-blue-400"
+                  aria-hidden="true"
+                />
                 {isSupabaseConfigured ? 'Optional Metadata Sync Enabled' : 'Local-Only Mode'}
               </span>
             </div>
@@ -50,9 +53,9 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <a href="/#features" className="transition-colors hover:text-text-primary">
+                <Link to="/#features" className="transition-colors hover:text-text-primary">
                   Supported PII Categories
-                </a>
+                </Link>
               </li>
             </ul>
           </div>
@@ -63,24 +66,24 @@ export function Footer() {
             </h3>
             <ul className="space-y-2 text-sm text-text-muted">
               <li>
-                <a href="/#how-it-works" className="transition-colors hover:text-text-primary">
+                <Link to="/#how-it-works" className="transition-colors hover:text-text-primary">
                   How It Works
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="/#modes" className="transition-colors hover:text-text-primary">
+                <Link to="/#modes" className="transition-colors hover:text-text-primary">
                   Redaction Modes
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="/#security" className="transition-colors hover:text-text-primary">
+                <Link to="/#security" className="transition-colors hover:text-text-primary">
                   Security Guarantees
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="/#faq" className="transition-colors hover:text-text-primary">
+                <Link to="/#faq" className="transition-colors hover:text-text-primary">
                   FAQ
-                </a>
+                </Link>
               </li>
             </ul>
           </div>

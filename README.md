@@ -31,9 +31,9 @@ PrivacyShield AI is a privacy-first cybersecurity web application that detects, 
 
 ## Redaction Modes
 
-1. **Full Mask:** Replaces sensitive values with category tokens (`[REDACTED_EMAIL]`, `[REDACTED_CARD]`, etc.) or generic `[REDACTED]`.
-2. **Partial Mask:** Preserves strictly bounded verification context (e.g., `an**@example.com`, `XXXXXX3210`, `192.168.xxx.xxx`, `XXXX-XXXX-XXXX-3456`).
-3. **Consistent Pseudonymization:** Assigns deterministic, category-prefixed RAM-only tokens (`USER_01`, `PHONE_01`, `CARD_01`) consistently across repeated normalized occurrences, resetting automatically on new documents.
+1. **Full Mask:** Replaces sensitive values with category tokens (`[REDACTED_EMAIL]`, `[REDACTED_CREDIT_CARD]`, etc.) or generic `[REDACTED]`.
+2. **Partial Mask:** Preserves strictly bounded verification context (e.g., `an****@example.com`, `XXXXXX3210`, `192.168.xxx.xxx`, `XXXX-XXXX-XXXX-3456`).
+3. **Consistent Pseudonymization & Local AI Reply Re-Hydration:** Assigns deterministic, category-prefixed RAM-only tokens (`USER_01`, `PHONE_01`, `CARD_01`) consistently across repeated normalized occurrences, resets automatically on new documents, and allows locally restoring pseudonymized AI responses in volatile browser RAM.
 
 ---
 
@@ -44,15 +44,15 @@ privacyshield-ai/
 ├── frontend/          # React 19 + TypeScript + Vite + Tailwind CSS v4 + shadcn/ui
 │   ├── public/        # SVG brand assets
 │   ├── src/
-│   │   ├── components/  # common, layout, editor, detection, redaction, analytics, ui
+│   │   ├── components/  # common (incl. ErrorBoundary), layout, editor, detection, redaction, analytics, ui
 │   │   ├── pages/       # HomePage, WorkspacePage, HistoryPage, AboutPage, NotFoundPage
-│   │   ├── services/    # detection, redaction, csv, export, privacy, supabase
-│   │   ├── store/       # Zustand RAM-only workspace store & safe local stores
-│   │   ├── hooks/       # Theme, shortcuts, detection runner, scroll sync
+│   │   ├── services/    # detection (sync + Web Worker), redaction, csv (formula-safe), export, privacy, supabase
+│   │   ├── store/       # Zustand RAM-only workspace store & Zod-validated local stores
+│   │   ├── hooks/       # useSanitizationPipeline, useTheme
 │   │   ├── types/       # Shared TypeScript contracts
 │   │   ├── constants/   # Category metadata, limits, synthetic samples
-│   │   ├── utils/       # Validation, formatting, class helpers
-│   │   └── styles/      # Design tokens & Tailwind CSS theme
+│   │   ├── utils/       # Validation (UTF-8 / magic-byte / MIME), formatting, class helpers
+│   │   └── styles/      # WCAG AA design tokens & Tailwind CSS theme
 │   └── tests/         # unit (Vitest), integration (RTL), e2e (Playwright)
 ├── backend/           # Optional Supabase config, SQL migrations, RLS & DB types (metadata only)
 ├── docs/              # Architecture, Privacy Policy, Security, API & Testing docs

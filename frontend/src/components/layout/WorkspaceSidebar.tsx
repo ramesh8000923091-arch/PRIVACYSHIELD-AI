@@ -25,9 +25,9 @@ const SIDEBAR_ITEMS: readonly {
   label: string;
   icon: typeof BarChart3;
 }[] = [
-  { id: 'DASHBOARD', label: 'Dashboard', icon: BarChart3 },
   { id: 'WORKSPACE', label: 'Sanitization Workspace', icon: SlidersHorizontal },
   { id: 'RESULTS', label: 'Detection Results', icon: FileSearch },
+  { id: 'DASHBOARD', label: 'Dashboard', icon: BarChart3 },
   { id: 'ACTIVITY', label: 'Activity Log', icon: Activity },
   { id: 'SETTINGS', label: 'Settings', icon: Settings },
   { id: 'PRIVACY', label: 'Privacy Information', icon: Lock },
@@ -61,11 +61,12 @@ export function WorkspaceSidebar({
               <button
                 key={item.id}
                 type="button"
+                aria-current={active ? 'page' : undefined}
                 onClick={() => onSelectSection(item.id)}
                 className={cn(
                   'inline-flex shrink-0 items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors sm:text-sm cursor-pointer lg:w-full',
                   active
-                    ? 'bg-brand-primary/15 text-brand-primary'
+                    ? 'bg-brand-primary/15 text-brand-primary dark:text-blue-400'
                     : 'text-text-secondary hover:bg-bg-elevated hover:text-text-primary'
                 )}
               >

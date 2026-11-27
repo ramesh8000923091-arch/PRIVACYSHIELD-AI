@@ -13,24 +13,25 @@ import type { DetectedEntity } from '@/types';
  * Note: Performs structural format validation only — NEVER government database verification.
  */
 const VALID_PAN_ENTITY_CODES = new Set(['A', 'B', 'C', 'F', 'G', 'H', 'J', 'L', 'P', 'T']);
-const PAN_CANDIDATE_REGEX = /(?<![A-Za-z0-9])([A-Z]{3}[A-Z][A-Z][0-9]{4}[A-Z])(?![A-Za-z0-9])/g;
+const PAN_CANDIDATE_REGEX = /(?<![A-Za-z0-9_])([A-Za-z]{5}[0-9]{4}[A-Za-z])(?![A-Za-z0-9_])/g;
 
 export function isValidPanStructure(candidate: string): boolean {
-  if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(candidate)) {
+  const upper = candidate.trim().toUpperCase();
+  if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(upper)) {
     return false;
   }
 
-  const entityCode = candidate.charAt(3);
+  const entityCode = upper.charAt(3);
   if (!VALID_PAN_ENTITY_CODES.has(entityCode)) {
     return false;
   }
 
-  const nameInitial = candidate.charAt(4);
+  const nameInitial = upper.charAt(4);
   if (nameInitial < 'A' || nameInitial > 'Z') {
     return false;
   }
 
-  const numericCore = candidate.slice(5, 9);
+  const numericCore = upper.slice(5, 9);
   if (numericCore === '0000') {
     return false;
   }
@@ -55,6 +56,7 @@ export function detectPans(text: string): DetectedEntity[] {
 
     const start = match.index;
     const end = start + value.length;
+    const isUppercase = value === value.toUpperCase();
 
     results.push({
       id: `PAN-${start}-${end}`,
@@ -62,7 +64,7 @@ export function detectPans(text: string): DetectedEntity[] {
       value,
       start,
       end,
-      confidence: 0.94,
+      confidence: isUppercase ? 0.94 : 0.89,
       validationMethod: 'PAN_STRUCTURE_CHECK',
     });
   }

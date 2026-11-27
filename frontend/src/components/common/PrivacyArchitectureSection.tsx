@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   CheckCircle2,
   Cpu,
@@ -13,13 +13,33 @@ import {
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
 import { runPrivacyVerification } from '@/services/privacy';
 import { isSupabaseConfigured } from '@/services/supabase';
+import { useWorkspaceStore } from '@/store';
 import type { PrivacyVerificationReport } from '@/types';
 
 export function PrivacyArchitectureSection() {
-  const [report, setReport] = useState<PrivacyVerificationReport>(() => runPrivacyVerification());
+  const entities = useWorkspaceStore((s) => s.entities);
+  const uploadedFile = useWorkspaceStore((s) => s.uploadedFile);
+  const analytics = useWorkspaceStore((s) => s.analytics);
+
+  const buildReport = useCallback((): PrivacyVerificationReport => {
+    const sensitiveSamples = [
+      ...entities.map((entity) => entity.value),
+      ...(uploadedFile?.name ? [uploadedFile.name] : []),
+    ];
+    return runPrivacyVerification({
+      sensitiveSamples,
+      analyticsSnapshot: analytics,
+    });
+  }, [entities, uploadedFile, analytics]);
+
+  const [report, setReport] = useState<PrivacyVerificationReport>(() => buildReport());
+
+  useEffect(() => {
+    setReport(buildReport());
+  }, [buildReport]);
 
   function handleRunVerification() {
-    setReport(runPrivacyVerification());
+    setReport(buildReport());
   }
 
   return (

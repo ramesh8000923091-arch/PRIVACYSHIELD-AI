@@ -185,4 +185,75 @@ describe('Phase 5 — Modular PII Detection Engine', () => {
       expect(summary.entities.some((e) => e.value.includes('1234-5678-9012-3456'))).toBe(false);
     });
   });
+
+  describe('Round 2 Hardening Regressions — Edge Cases & False Positives', () => {
+    it('rejects C++ namespaces, CSS pseudo-elements, and identifier prefixes in IPv6 detection', () => {
+      const text = 'Code: std::cout, div::before, foo::bar, id:2001:db8::1, valid 2001:db8::1.';
+      const found = detectIpAddresses(text);
+      expect(found.map((e) => e.value)).toEqual(['2001:db8::1']);
+    });
+
+    it('deduplicates inner IPv4 inside IPv4-mapped and compressed IPv4-embedded IPv6 addresses', () => {
+      const found = detectIpAddresses(
+        'Mapped ::ffff:192.0.2.128, compressed ::192.0.2.128, and 2001:db8::192.0.2.128 connected.'
+      );
+      expect(found.map((e) => e.value)).toEqual([
+        '::ffff:192.0.2.128',
+        '::192.0.2.128',
+        '2001:db8::192.0.2.128',
+      ]);
+      expect(found.every((e) => e.validationMethod === 'IPV6_RFC4291_CHECK')).toBe(true);
+    });
+
+    it('detects Luhn-valid spaced, hyphenated, and contiguous credit cards followed by trailing CVV', () => {
+      const text =
+        'Visa 4111 1111 1111 1111 123, Hyphen 4111-1111-1111-1111 456, Bare 4111111111111111 789, Amex 3782 822463 10005 123';
+      const found = detectCreditCards(text);
+      expect(found.map((e) => e.value)).toEqual([
+        '4111 1111 1111 1111',
+        '4111-1111-1111-1111',
+        '4111111111111111',
+        '3782 822463 10005',
+      ]);
+    });
+
+    it('detects extended Indian phone formats and blocks underscore IDs, floats, and numeric prefixes', () => {
+      const text =
+        'Call (+91) 98765 43210, Ph.+91-9820112233, No.9123456789, 919876543210, 9876\u00A0543210, 98765\u201343210. Ignore id_9876543210, 9876543210.50, 1234 9876543210.';
+      const found = detectPhones(text);
+      expect(found.map((e) => e.value)).toEqual([
+        '(+91) 98765 43210',
+        '+91-9820112233',
+        '9123456789',
+        '919876543210',
+        '9876\u00A0543210',
+        '98765\u201343210',
+      ]);
+    });
+
+    it('detects Aadhaar adjacent to non-card numbers and with tab/NBSP/en-dash separators', () => {
+      const contiguous = SYNTHETIC_AADHAAR_1.replace(/\s+/g, '');
+      const tabbed = `${contiguous.slice(0, 4)}\t${contiguous.slice(4, 8)}\t${contiguous.slice(8)}`;
+      const nbsp = `${contiguous.slice(0, 4)}\u00A0${contiguous.slice(4, 8)}\u2013${contiguous.slice(8)}`;
+      const text = `User 1 ${contiguous}, ${SYNTHETIC_AADHAAR_1} 2026, ${tabbed}, ${nbsp}`;
+      const found = detectAadhaar(text);
+      expect(found).toHaveLength(4);
+    });
+
+    it('detects lowercase and mixed-case PAN strings with calibrated confidence', () => {
+      const found = detectPans('Lowercase pan: abcpk1234f and uppercase AAACA5678K');
+      expect(found).toHaveLength(2);
+      expect(found[0].value).toBe('abcpk1234f');
+      expect(found[0].confidence).toBeLessThan(found[1].confidence);
+      expect(found[1].value).toBe('AAACA5678K');
+    });
+
+    it('prefers strictly enclosing EMAIL over inner numeric spans like Aadhaar or card digits', () => {
+      const aadhaarDigits = SYNTHETIC_AADHAAR_1.replace(/\s+/g, '');
+      const text = `Alerts: ${aadhaarDigits}@example.com and 4111111111111111@example.com`;
+      const summary = detectPII(text);
+      expect(summary.totalDetected).toBe(2);
+      expect(summary.entities.every((e) => e.type === 'EMAIL')).toBe(true);
+    });
+  });
 });

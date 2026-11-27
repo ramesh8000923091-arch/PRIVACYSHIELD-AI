@@ -25,14 +25,14 @@
   /* Light Mode Typography */
   --text-primary: #0f172a;
   --text-secondary: #334155;
-  --text-muted: #64748b;
+  --text-muted: #475569;
 
-  /* Brand & Status Accents */
+  /* Brand & Status Accents (WCAG AA compliant >= 4.5:1) */
   --brand-primary: #2563eb;
   --brand-primary-hover: #1d4ed8;
   --brand-secondary: #7c3aed;
-  --status-verified: #059669;
-  --status-warning: #d97706;
+  --status-verified: #047857;
+  --status-warning: #b45309;
   --status-danger: #dc2626;
 
   /* Semantic PII Category Tokens (Light Mode) */
@@ -80,9 +80,9 @@
   --text-secondary: #cbd5e1;
   --text-muted: #94a3b8;
 
-  /* Brand & Status Accents */
-  --brand-primary: #3b82f6;
-  --brand-primary-hover: #60a5fa;
+  /* Brand & Status Accents (solid primary >= 4.5:1 with white text) */
+  --brand-primary: #2563eb;
+  --brand-primary-hover: #3b82f6;
   --brand-secondary: #8b5cf6;
   --status-verified: #10b981;
   --status-warning: #f59e0b;

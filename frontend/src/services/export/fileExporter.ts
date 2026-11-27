@@ -16,17 +16,9 @@ export function buildSanitizedFileName(
 }
 
 /**
- * Downloads sanitized output strictly via browser Blob API and revokes
- * the temporary object URL immediately to prevent memory retention.
+ * Shared browser Blob download helper. Always revokes temporary object URLs immediately.
  */
-export function downloadSanitizedFile(
-  content: string,
-  format: ExportFormat,
-  originalFileName?: string | null
-): string {
-  const fileName = buildSanitizedFileName(format, originalFileName);
-  const mimeType = format === 'csv' ? 'text/csv;charset=utf-8' : 'text/plain;charset=utf-8';
-
+export function triggerBlobDownload(content: string, fileName: string, mimeType: string): string {
   const blob = new Blob([content], { type: mimeType });
   const objectUrl = URL.createObjectURL(blob);
 
@@ -39,9 +31,22 @@ export function downloadSanitizedFile(
     link.click();
     document.body.removeChild(link);
   } finally {
-    // Always revoke temporary object URL
     URL.revokeObjectURL(objectUrl);
   }
 
   return fileName;
+}
+
+/**
+ * Downloads sanitized output strictly via browser Blob API and revokes
+ * the temporary object URL immediately to prevent memory retention.
+ */
+export function downloadSanitizedFile(
+  content: string,
+  format: ExportFormat,
+  originalFileName?: string | null
+): string {
+  const fileName = buildSanitizedFileName(format, originalFileName);
+  const mimeType = format === 'csv' ? 'text/csv;charset=utf-8' : 'text/plain;charset=utf-8';
+  return triggerBlobDownload(content, fileName, mimeType);
 }

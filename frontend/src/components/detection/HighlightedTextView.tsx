@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { CheckCircle2, EyeOff, Info, ShieldAlert } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { CheckCircle2, EyeOff, Info, ShieldAlert, X } from 'lucide-react';
 import { Badge, Button } from '@/components/ui';
 import { PII_CATEGORIES } from '@/constants';
 import type { DetectedEntity } from '@/types';
@@ -30,9 +30,21 @@ export function HighlightedTextView({
 }: HighlightedTextViewProps) {
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!selectedEntityId) return;
+    function handleEsc(event: KeyboardEvent) {
+      if (event.key === 'Escape') setSelectedEntityId(null);
+    }
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [selectedEntityId]);
+
   const slices = useMemo<RenderSlice[]>(() => {
     if (!text) return [];
-    const sorted = [...entities].filter((e) => !e.cellLocation).sort((a, b) => a.start - b.start);
+    const sorted = [...entities]
+      .filter((e) => !e.cellLocation && e.start >= 0 && e.end > e.start && e.end <= text.length)
+      .sort((a, b) => a.start - b.start);
+
     if (sorted.length === 0) {
       return [{ key: 'plain-all', text }];
     }
@@ -41,7 +53,7 @@ export function HighlightedTextView({
     let cursor = 0;
 
     for (const entity of sorted) {
-      if (entity.start < cursor || entity.end > text.length) continue;
+      if (entity.start < cursor) continue;
       if (entity.start > cursor) {
         result.push({
           key: `plain-${cursor}`,
@@ -65,6 +77,8 @@ export function HighlightedTextView({
 
     return result;
   }, [text, entities]);
+
+  const hasHighlightedEntities = useMemo(() => slices.some((s) => Boolean(s.entity)), [slices]);
 
   const selectedEntity = useMemo(
     () => entities.find((e) => e.id === selectedEntityId) ?? null,
@@ -99,10 +113,11 @@ export function HighlightedTextView({
             <button
               key={slice.key}
               type="button"
+              aria-pressed={isSelected}
               onClick={() => setSelectedEntityId(isSelected ? null : entity.id)}
-              title={`${meta.label} — click to inspect or ${isExcluded ? 'include' : 'exclude'}`}
+              title={`${meta.label} (${isExcluded ? 'excluded' : 'will redact'}) — click to inspect`}
               className={`mx-0.5 inline rounded px-1 py-0.5 font-medium transition-all cursor-pointer ${
-                isExcluded ? 'opacity-55 line-through' : ''
+                isExcluded ? 'opacity-75 line-through' : ''
               } ${isSelected ? 'ring-2 ring-brand-primary' : ''}`}
               style={{
                 color: meta.colorVar.fg,
@@ -124,7 +139,7 @@ export function HighlightedTextView({
         >
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <Info className="h-4 w-4 text-brand-primary" aria-hidden="true" />
+              <Info className="h-4 w-4 text-brand-primary dark:text-blue-400" aria-hidden="true" />
               <span className="text-xs font-semibold text-text-primary">
                 {PII_CATEGORIES[selectedEntity.type].label}
               </span>
@@ -149,30 +164,45 @@ export function HighlightedTextView({
             </div>
           </div>
 
-          <Button
-            type="button"
-            size="sm"
-            variant={excludedEntityIds.has(selectedEntity.id) ? 'primary' : 'outline'}
-            onClick={() => onToggleExclude(selectedEntity.id)}
-          >
-            {excludedEntityIds.has(selectedEntity.id) ? (
-              <>
-                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                Include in Redaction
-              </>
-            ) : (
-              <>
-                <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
-                Exclude from Redaction
-              </>
-            )}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={excludedEntityIds.has(selectedEntity.id) ? 'primary' : 'outline'}
+              onClick={() => onToggleExclude(selectedEntity.id)}
+            >
+              {excludedEntityIds.has(selectedEntity.id) ? (
+                <>
+                  <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  Include in Redaction
+                </>
+              ) : (
+                <>
+                  <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
+                  Exclude from Redaction
+                </>
+              )}
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              onClick={() => setSelectedEntityId(null)}
+              aria-label="Close entity inspector"
+              title="Close inspector (Esc)"
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          </div>
         </div>
       )}
 
-      {entities.length > 0 && !selectedEntity && (
+      {hasHighlightedEntities && !selectedEntity && (
         <p className="flex items-center gap-1.5 text-[11px] text-text-muted">
-          <ShieldAlert className="h-3.5 w-3.5 text-brand-primary" aria-hidden="true" />
+          <ShieldAlert
+            className="h-3.5 w-3.5 text-brand-primary dark:text-blue-400"
+            aria-hidden="true"
+          />
           Click any highlighted value above to inspect its validation method or exclude it from
           redaction.
         </p>

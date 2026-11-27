@@ -1,14 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_ENABLED_CATEGORIES, LIMITS, SAMPLE_CSV_TEXT } from '@/constants';
-import { parseCsvContent, sanitizeCsvDocument } from '@/services/csv';
+import { parseCsvContent, redactCsvDocument, sanitizeCsvDocument } from '@/services/csv';
+import { detectCsvCells } from '@/services/detection';
 import {
   buildSanitizedFileName,
   createSafePrivacyReport,
+  downloadJsonReport,
   downloadSanitizedFile,
+  exportSafeAuditLogSummary,
 } from '@/services/export';
 import { verifyNoSensitiveDataInPayload } from '@/services/privacy';
 import { PseudonymMapper } from '@/services/redaction';
-import { containsBinaryNullBytes, validateUploadedFile } from '@/utils/fileValidation';
+import {
+  containsBinaryNullBytes,
+  validateUploadedFile,
+  validateUtf8TextBytes,
+} from '@/utils/fileValidation';
 
 describe('Phase 8 — CSV Cell Sanitization, File Validation & Safe Export', () => {
   it('preserves CSV rows, columns, headers, and commas inside quoted fields during sanitization', () => {
@@ -149,5 +156,127 @@ describe('Phase 8 — CSV Cell Sanitization, File Validation & Safe Export', () 
     expect(verifyNoSensitiveDataInPayload(report, ['priya.sharma@example.com', 'ABCPK1234F'])).toBe(
       true
     );
+  });
+
+  it('detects semicolon and tab delimiters reliably even on 2-row CSVs with trailing newline', () => {
+    const semiCsv = 'id;email;phone\n1;priya@example.com;9876543210\n';
+    const semiParsed = parseCsvContent(semiCsv, 'semi.csv', semiCsv.length);
+    expect(semiParsed.document.delimiter).toBe(';');
+    expect(semiParsed.document.headers).toEqual(['id', 'email', 'phone']);
+    expect(semiParsed.document.rows[1]).toEqual(['1', 'priya@example.com', '9876543210']);
+
+    const tabCsv = 'id\temail\n1\tpriya@example.com\n';
+    const tabParsed = parseCsvContent(tabCsv, 'tab.csv', tabCsv.length);
+    expect(tabParsed.document.delimiter).toBe('\t');
+    expect(tabParsed.document.headers).toEqual(['id', 'email']);
+  });
+
+  it('neutralizes CSV/DDE spreadsheet formula injection while preserving legitimate negative numbers', () => {
+    const formulaCsv =
+      'id,formula,balance,email\n1,"=HYPERLINK(""https://evil.example"",""Click"")",-42.5,priya@example.com\n2,+cmd|calc,-100,ok@example.org\n';
+    const { document: csvDoc } = parseCsvContent(formulaCsv, 'formula.csv', formulaCsv.length);
+    const out = sanitizeCsvDocument(
+      csvDoc,
+      { enabledCategories: DEFAULT_ENABLED_CATEGORIES },
+      { mode: 'FULL_MASK', fullMaskVariant: 'CATEGORY_TAG', excludedEntityIds: new Set() }
+    );
+    const reparsed = parseCsvContent(out.sanitizedCsvText, 'safe.csv', out.sanitizedCsvText.length);
+    expect(reparsed.document.rows[1][1].startsWith("'=HYPERLINK")).toBe(true);
+    expect(reparsed.document.rows[1][2]).toBe('-42.5');
+    expect(reparsed.document.rows[2][1]).toBe("'+cmd|calc");
+    expect(reparsed.document.rows[2][2]).toBe('-100');
+  });
+
+  it('handles 550-row CSV single-pass redaction with per-entity exclusion, cell highlights, and diffSegments', () => {
+    const lines = ['id,email'];
+    for (let i = 1; i <= 550; i += 1) {
+      lines.push(`${i},user${i}@example.com`);
+    }
+    const largeCsv = lines.join('\n');
+    const { document: csvDoc } = parseCsvContent(largeCsv, 'large.csv', largeCsv.length);
+    const detection = detectCsvCells(csvDoc.rows, csvDoc.headers, {
+      enabledCategories: DEFAULT_ENABLED_CATEGORIES,
+    });
+    expect(detection.totalDetected).toBe(550);
+
+    const excludedId = detection.entities[0].id;
+    const redacted = redactCsvDocument(csvDoc, detection.entities, {
+      mode: 'FULL_MASK',
+      fullMaskVariant: 'CATEGORY_TAG',
+      excludedEntityIds: new Set([excludedId]),
+    });
+
+    expect(redacted.redactedCount).toBe(549);
+    expect(redacted.excludedCount).toBe(1);
+    expect(redacted.excludedCellKeys.has('1:1')).toBe(true);
+    expect(redacted.redactedCellKeys.has('2:1')).toBe(true);
+    // Large CSVs (>150 rows) skip DOM diffSegments generation to keep UI snappy
+    expect(redacted.diffSegments).toHaveLength(0);
+    expect(redacted.sanitizedRows[1][1]).toBe('user1@example.com');
+    expect(redacted.sanitizedRows[2][1]).toBe('[REDACTED_EMAIL]');
+
+    // Small CSVs emit full CSV-aware diffSegments for highlighted Text Diff
+    const { document: smallDoc } = parseCsvContent(
+      SAMPLE_CSV_TEXT,
+      'small.csv',
+      SAMPLE_CSV_TEXT.length
+    );
+    const smallOut = sanitizeCsvDocument(
+      smallDoc,
+      { enabledCategories: DEFAULT_ENABLED_CATEGORIES },
+      { mode: 'FULL_MASK', fullMaskVariant: 'CATEGORY_TAG', excludedEntityIds: new Set() }
+    );
+    expect(smallOut.diffSegments.some((seg) => seg.kind === 'redacted')).toBe(true);
+  });
+
+  it('rejects disguised binary files (PDF/PNG/invalid UTF-8) via byte inspection', async () => {
+    const fakePdf = new File(
+      [new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37])],
+      'fake.txt',
+      {
+        type: 'text/plain',
+      }
+    );
+    const fakePng = new File(
+      [new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])],
+      'img.csv',
+      {
+        type: 'text/csv',
+      }
+    );
+    const validText = new File(['Hello, priya@example.com\n'], 'clean.txt', {
+      type: 'text/plain',
+    });
+    // >8 KB multi-byte Devanagari UTF-8 text crossing the 8192-byte sample boundary + legitimate "MZ" header CSV
+    const largeUnicode = new File(['नमस्ते privacyshield परीक्षण '.repeat(350)], 'hindi.txt', {
+      type: 'text/plain',
+    });
+    const mzHeaderCsv = new File(['MZ_ID,email\n1,priya@example.com\n'], 'mz-codes.csv', {
+      type: 'text/csv',
+    });
+
+    expect((await validateUtf8TextBytes(fakePdf)).valid).toBe(false);
+    expect((await validateUtf8TextBytes(fakePng)).valid).toBe(false);
+    expect((await validateUtf8TextBytes(validText)).valid).toBe(true);
+    expect((await validateUtf8TextBytes(largeUnicode)).valid).toBe(true);
+    expect((await validateUtf8TextBytes(mzHeaderCsv)).valid).toBe(true);
+  });
+
+  it('revokes Blob URLs for JSON report and audit summary downloads', () => {
+    const createSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:json-url');
+    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    const reportName = downloadJsonReport({ safe: true }, 'test-report');
+    const auditName = exportSafeAuditLogSummary([]);
+
+    expect(reportName).toMatch(/^test-report-.*\.json$/);
+    expect(auditName).toMatch(/^privacyshield-audit-summary-.*\.json$/);
+    expect(createSpy).toHaveBeenCalledTimes(2);
+    expect(revokeSpy).toHaveBeenCalledTimes(2);
+
+    createSpy.mockRestore();
+    revokeSpy.mockRestore();
+    clickSpy.mockRestore();
   });
 });

@@ -104,4 +104,72 @@ describe('Phase 6 — Redaction Engine & Consistent Pseudonymization', () => {
     expect(out1.sanitizedText).toBe('Owner: USER_01');
     expect(out2.sanitizedText).toBe('New: USER_02, Returning: USER_01');
   });
+
+  it('canonicalizes compressed, expanded, and uppercase IPv6 addresses to identical pseudonyms', () => {
+    const mapper = new PseudonymMapper();
+    const t1 = mapper.getOrCreateToken('IP_ADDRESS', '2001:db8::1');
+    const t2 = mapper.getOrCreateToken('IP_ADDRESS', '2001:0DB8:0000:0000:0000:0000:0000:0001');
+    const t3 = mapper.getOrCreateToken('IP_ADDRESS', '2001:db8::2');
+    expect(t1).toBe('IP_01');
+    expect(t2).toBe('IP_01');
+    expect(t3).toBe('IP_02');
+    expect(mapper.getTotalMappings()).toBe(2);
+  });
+
+  it('handles leading-compressed IPv6 partial masking, invalid IP fallback, and short emails safely', () => {
+    expect(applyPartialMask('IP_ADDRESS', '::a:b:c:d:e:f:1')).toBe(
+      '0000:000a:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx'
+    );
+    expect(applyPartialMask('IP_ADDRESS', 'not-an-ip')).toBe('[REDACTED_IP_ADDRESS]');
+    expect(applyPartialMask('EMAIL', 'a@b.com')).toBe('*@b.com');
+    expect(applyPartialMask('EMAIL', 'ab@b.com')).toBe('a*@b.com');
+  });
+
+  it('restores pseudonymized AI replies locally in RAM without altering unknown tokens', () => {
+    const mapper = new PseudonymMapper();
+    const u1 = mapper.getOrCreateToken('EMAIL', 'priya.sharma@example.com');
+    const p1 = mapper.getOrCreateToken('PHONE', '+91 98765 43210');
+
+    const restored = mapper.restoreText(
+      `Hi ${u1}, we called ${p1}. Unknown token USER_99 stays intact.`
+    );
+    expect(restored.restoredCount).toBe(2);
+    expect(restored.restoredText).toBe(
+      'Hi priya.sharma@example.com, we called +91 98765 43210. Unknown token USER_99 stays intact.'
+    );
+
+    mapper.reset();
+    const afterReset = mapper.restoreText(`Hi ${u1}`);
+    expect(afterReset.restoredCount).toBe(0);
+    expect(afterReset.restoredText).toBe(`Hi ${u1}`);
+  });
+
+  it('guards against out-of-bounds or zero-length entities without corrupting output', () => {
+    const out = applyRedaction(
+      'Hello world',
+      [
+        {
+          id: 'bad-1',
+          type: 'EMAIL',
+          value: '',
+          start: 3,
+          end: 3,
+          confidence: 0.9,
+          validationMethod: 'RFC_PATTERN',
+        },
+        {
+          id: 'bad-2',
+          type: 'EMAIL',
+          value: 'overflow',
+          start: 5,
+          end: 99,
+          confidence: 0.9,
+          validationMethod: 'RFC_PATTERN',
+        },
+      ],
+      { mode: 'FULL_MASK', fullMaskVariant: 'CATEGORY_TAG', excludedEntityIds: new Set() }
+    );
+    expect(out.sanitizedText).toBe('Hello world');
+    expect(out.redactedCount).toBe(0);
+  });
 });

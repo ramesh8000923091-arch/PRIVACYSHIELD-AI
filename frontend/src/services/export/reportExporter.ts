@@ -1,4 +1,5 @@
 import type { AuditLogEntry, DetectionAnalytics, RedactionMode } from '@/types';
+import { triggerBlobDownload } from './fileExporter';
 
 export interface SafePrivacyReport {
   reportType: 'PRIVACYSHIELD_LOCAL_PRIVACY_REPORT';
@@ -48,24 +49,11 @@ export function createSafePrivacyReport(
 export function downloadJsonReport(payload: unknown, fileNamePrefix: string): string {
   const stamp = new Date().toISOString().slice(0, 10);
   const fileName = `${fileNamePrefix}-${stamp}.json`;
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {
-    type: 'application/json;charset=utf-8',
-  });
-  const objectUrl = URL.createObjectURL(blob);
-
-  try {
-    const link = document.createElement('a');
-    link.href = objectUrl;
-    link.download = fileName;
-    link.rel = 'noopener noreferrer';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
-
-  return fileName;
+  return triggerBlobDownload(
+    JSON.stringify(payload, null, 2),
+    fileName,
+    'application/json;charset=utf-8'
+  );
 }
 
 export function exportSafeAuditLogSummary(entries: readonly AuditLogEntry[]): string {

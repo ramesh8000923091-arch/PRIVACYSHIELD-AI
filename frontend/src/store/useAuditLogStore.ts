@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { z } from 'zod';
 import { LIMITS } from '@/constants';
 import { AuditLogEntrySchema, type AuditLogEntry, type AuditLogInput } from '@/types';
 
@@ -18,7 +19,8 @@ function generateAuditId(): string {
 
 /**
  * Local-first activity log store.
- * Every entry is validated via strict Zod schema to ensure zero raw text or PII values are stored.
+ * Every entry is validated via strict Zod schema on write AND rehydration
+ * to ensure zero raw text or PII values are stored.
  */
 export const useAuditLogStore = create<AuditLogState>()(
   persist(
@@ -49,6 +51,13 @@ export const useAuditLogStore = create<AuditLogState>()(
     {
       name: 'privacyshield:audit-log',
       version: 1,
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        const parsed = z.array(AuditLogEntrySchema).safeParse(state.entries);
+        if (!parsed.success) {
+          state.entries = [];
+        }
+      },
     }
   )
 );

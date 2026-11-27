@@ -2,15 +2,15 @@ import type { DetectedEntity } from '@/types';
 
 /**
  * Detects Indian mobile number formats:
- * - +91 9876543210, +91-98765-43210, +91 98765 43210, +919876543210
- * - 91 9876543210, 91-9876543210
+ * - +91 9876543210, (+91) 9876543210, +91-98765-43210, +91 98765 43210, +919876543210
+ * - 91 9876543210, 91-9876543210, 919876543210
  * - 09876543210, 0 98765 43210
- * - 9876543210, 98765 43210, 98765-43210, 987-654-3210
+ * - 9876543210, 98765 43210, 98765-43210, 9876-543210, 987-654-3210 (including NBSP & en-dash)
  *
- * Avoids matching substrings inside longer numeric sequences, credit cards, Aadhaar, or IP addresses.
+ * Avoids matching substrings inside longer numeric sequences, decimals, underscore IDs, or IP addresses.
  */
 const INDIAN_PHONE_REGEX =
-  /(?<![\d.+A-Za-z])((?:\+91[ -]?|91[ -]|0[ -]?)?(?:[6-9]\d{9}|[6-9]\d{4}[ -]\d{5}|[6-9]\d{2}[ -]\d{3}[ -]\d{4}|[6-9]\d{3}[ -]\d{3}[ -]\d{3}))(?![\dA-Za-z])/g;
+  /(?<![\d+A-Za-z_])((?:\(\+91\)[ \u00A0\u2013-]?|\+91[ \u00A0\u2013-]?|91[ \u00A0\u2013-]|91(?=[6-9]\d{9}(?![\dA-Za-z_]))|0[ \u00A0\u2013-]?)?(?:[6-9]\d{9}|[6-9]\d{4}[ \u00A0\u2013-]\d{5}|[6-9]\d{3}[ \u00A0\u2013-]\d{6}|[6-9]\d{2}[ \u00A0\u2013-]\d{3}[ \u00A0\u2013-]\d{4}|[6-9]\d{3}[ \u00A0\u2013-]\d{3}[ \u00A0\u2013-]\d{3}))(?![\dA-Za-z_]|\.\d)/g;
 
 export function normalizeIndianPhone(raw: string): string {
   const digits = raw.replace(/\D/g, '');
@@ -28,7 +28,6 @@ function isValidIndianMobile(raw: string): boolean {
   if (!/^[6-9]\d{9}$/.test(canonical)) {
     return false;
   }
-  // Reject 10 identical digits (e.g. 9999999999)
   if (/^(\d)\1{9}$/.test(canonical)) {
     return false;
   }
@@ -49,18 +48,36 @@ export function detectPhones(text: string): DetectedEntity[] {
     const start = match.index;
     const end = start + value.length;
 
-    // Avoid matching a 10-digit substring preceded/followed by hyphen+digit (e.g., part of card/ID)
+    // Avoid matching decimals like 12.9876543210, while permitting "Ph.+91 9876543210" & "No.9876543210"
     const prevTwo = text.slice(Math.max(0, start - 2), start);
     const nextTwo = text.slice(end, end + 2);
+    if (/\d\.$/.test(prevTwo)) {
+      continue;
+    }
+
+    // Avoid matching a bare 10-digit substring adjacent to hyphen/space + digit (e.g., card or long numeric ID)
+    const hasExplicitPrefix =
+      value.startsWith('+91') ||
+      value.startsWith('(+91)') ||
+      value.startsWith('0') ||
+      /^91[ \u00A0\u2013-]/.test(value) ||
+      /^91\d{10}$/.test(value);
+
     if (/\d-$/.test(prevTwo) || /^-\d/.test(nextTwo)) {
       continue;
+    }
+    if (!hasExplicitPrefix && (/\d $/.test(prevTwo) || /^ \d/.test(nextTwo))) {
+      // Allow single digit label before phone only when preceded by word (e.g. "Line 1 9876543210"),
+      // reject 4+ digit numeric chunks (e.g. "1234 9876543210")
+      const prevSix = text.slice(Math.max(0, start - 6), start);
+      if (/\d{2,}[ \u00A0]$/.test(prevSix)) {
+        continue;
+      }
     }
 
     if (!isValidIndianMobile(value)) {
       continue;
     }
-
-    const hasPrefix = value.startsWith('+91') || value.startsWith('91') || value.startsWith('0');
 
     results.push({
       id: `PHONE-${start}-${end}`,
@@ -68,7 +85,7 @@ export function detectPhones(text: string): DetectedEntity[] {
       value,
       start,
       end,
-      confidence: hasPrefix ? 0.96 : 0.9,
+      confidence: hasExplicitPrefix ? 0.96 : 0.9,
       validationMethod: 'INDIAN_MOBILE_RULE',
     });
   }

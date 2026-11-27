@@ -2,8 +2,10 @@ import { expect, test } from '@playwright/test';
 
 test.describe('Phase 11 — Complete Interactive Controls & Sidebar Audit', () => {
   test('verifies every interactive workspace button, sidebar tab, settings toggle, and history control', async ({
+    context,
     page,
   }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     const consoleErrors: string[] = [];
     const pageErrors: string[] = [];
 
@@ -32,9 +34,12 @@ test.describe('Phase 11 — Complete Interactive Controls & Sidebar Audit', () =
     await page.getByRole('button', { name: /Reset Mappings/i }).click();
     await expect(page.getByText(/RAM pseudonymization mappings cleared/i)).toBeVisible();
 
-    // Test Copy Output button
+    // Test Copy Output button (and verify actual sanitized clipboard text)
     await page.getByRole('button', { name: /Copy Output/i }).click();
     await expect(page.getByRole('button', { name: /Copied/i })).toBeVisible();
+    const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipboardText).toContain('USER_01');
+    expect(clipboardText).not.toContain('priya.sharma@example.com');
 
     // Test Sample CSV button
     await page.getByRole('button', { name: /Sample CSV/i }).click();
@@ -66,7 +71,7 @@ test.describe('Phase 11 — Complete Interactive Controls & Sidebar Audit', () =
     // Sidebar: Privacy Information + Re-run check
     await page.getByRole('button', { name: /Privacy Information/i }).click();
     await page.getByRole('button', { name: /Re-run Privacy Check/i }).click();
-    await expect(page.getByText('VERIFIED')).toBeVisible();
+    await expect(page.getByText('VERIFIED', { exact: true })).toBeVisible();
 
     // Sidebar back to Workspace -> Clear button
     await page.getByRole('button', { name: /Sanitization Workspace/i }).click();

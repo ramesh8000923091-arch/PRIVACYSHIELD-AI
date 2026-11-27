@@ -9,10 +9,13 @@ import type {
   RedactionMode,
   UploadedFileMeta,
 } from '@/types';
+import { usePreferencesStore } from './usePreferencesStore';
 
 interface WorkspaceState {
   // Strictly volatile RAM-only document state (NEVER persisted)
   rawText: string;
+  /** Exact rawText snapshot that `entities` were detected against (prevents stale-offset leaks). */
+  scannedText: string;
   inputSource: InputSourceType;
   uploadedFile: UploadedFileMeta | null;
   parsedCsv: ParsedCsvDocument | null;
@@ -30,9 +33,23 @@ interface WorkspaceState {
 
   // Actions
   setRawText: (text: string, source?: InputSourceType) => void;
+  setDocumentWithFile: (
+    text: string,
+    source: InputSourceType,
+    file: UploadedFileMeta | null,
+    csv?: ParsedCsvDocument | null
+  ) => void;
   setUploadedFile: (file: UploadedFileMeta | null, csv?: ParsedCsvDocument | null) => void;
-  setDetectionResults: (entities: DetectedEntity[], analytics: DetectionAnalytics | null) => void;
-  setRedactionOutput: (sanitizedText: string, diffSegments: DiffSegment[]) => void;
+  setDetectionResults: (
+    entities: DetectedEntity[],
+    analytics: DetectionAnalytics | null,
+    scannedText?: string
+  ) => void;
+  setRedactionOutput: (
+    sanitizedText: string,
+    diffSegments: DiffSegment[],
+    analyticsPatch?: Partial<DetectionAnalytics>
+  ) => void;
   setRedactionMode: (mode: RedactionMode) => void;
   setFullMaskVariant: (variant: FullMaskVariant) => void;
   toggleEntityExclusion: (entityId: string) => void;
@@ -42,23 +59,27 @@ interface WorkspaceState {
   resetWorkspace: () => void;
 }
 
-const createInitialWorkspaceState = () => ({
-  rawText: '',
-  inputSource: 'PASTE' as InputSourceType,
-  uploadedFile: null as UploadedFileMeta | null,
-  parsedCsv: null as ParsedCsvDocument | null,
-  entities: [] as DetectedEntity[],
-  excludedEntityIds: new Set<string>(),
-  redactionMode: 'FULL_MASK' as RedactionMode,
-  fullMaskVariant: 'CATEGORY_TAG' as FullMaskVariant,
-  sanitizedText: '',
-  diffSegments: [] as DiffSegment[],
-  analytics: null as DetectionAnalytics | null,
-  isProcessing: false,
-  progressPercent: 0,
-  errorMessage: null as string | null,
-  mappingVersion: 0,
-});
+const createInitialWorkspaceState = () => {
+  const prefs = usePreferencesStore.getState();
+  return {
+    rawText: '',
+    scannedText: '',
+    inputSource: 'PASTE' as InputSourceType,
+    uploadedFile: null as UploadedFileMeta | null,
+    parsedCsv: null as ParsedCsvDocument | null,
+    entities: [] as DetectedEntity[],
+    excludedEntityIds: new Set<string>(),
+    redactionMode: prefs.defaultRedactionMode,
+    fullMaskVariant: prefs.fullMaskVariant,
+    sanitizedText: '',
+    diffSegments: [] as DiffSegment[],
+    analytics: null as DetectionAnalytics | null,
+    isProcessing: false,
+    progressPercent: 0,
+    errorMessage: null as string | null,
+    mappingVersion: 0,
+  };
+};
 
 /**
  * Volatile RAM-only store for document content, detected entities, and sanitization results.
@@ -68,9 +89,36 @@ export const useWorkspaceStore = create<WorkspaceState>()((set) => ({
   ...createInitialWorkspaceState(),
 
   setRawText: (rawText, source = 'PASTE') =>
+    set((state) => ({
+      rawText,
+      scannedText: '',
+      inputSource: source,
+      uploadedFile: source === 'PASTE' || source === 'SAMPLE' ? null : state.uploadedFile,
+      parsedCsv: source === 'PASTE' || source === 'SAMPLE' ? null : state.parsedCsv,
+      entities: [],
+      excludedEntityIds: new Set<string>(),
+      sanitizedText: '',
+      diffSegments: [],
+      analytics: null,
+      isProcessing: Boolean(rawText),
+      progressPercent: rawText ? 5 : 0,
+      errorMessage: null,
+    })),
+
+  setDocumentWithFile: (rawText, source, uploadedFile, parsedCsv = null) =>
     set({
       rawText,
+      scannedText: '',
       inputSource: source,
+      uploadedFile,
+      parsedCsv,
+      entities: [],
+      excludedEntityIds: new Set<string>(),
+      sanitizedText: '',
+      diffSegments: [],
+      analytics: null,
+      isProcessing: Boolean(rawText),
+      progressPercent: rawText ? 15 : 0,
       errorMessage: null,
     }),
 
@@ -81,18 +129,23 @@ export const useWorkspaceStore = create<WorkspaceState>()((set) => ({
       errorMessage: null,
     }),
 
-  setDetectionResults: (entities, analytics) =>
-    set({
+  setDetectionResults: (entities, analytics, scannedText) =>
+    set((state) => ({
       entities,
       analytics,
+      scannedText: scannedText ?? state.rawText,
       excludedEntityIds: new Set<string>(),
-    }),
+    })),
 
-  setRedactionOutput: (sanitizedText, diffSegments) =>
-    set({
+  setRedactionOutput: (sanitizedText, diffSegments, analyticsPatch) =>
+    set((state) => ({
       sanitizedText,
       diffSegments,
-    }),
+      analytics:
+        state.analytics && analyticsPatch
+          ? { ...state.analytics, ...analyticsPatch }
+          : state.analytics,
+    })),
 
   setRedactionMode: (redactionMode) => set({ redactionMode }),
 
@@ -122,8 +175,6 @@ export const useWorkspaceStore = create<WorkspaceState>()((set) => ({
   resetWorkspace: () =>
     set((state) => ({
       ...createInitialWorkspaceState(),
-      redactionMode: state.redactionMode,
-      fullMaskVariant: state.fullMaskVariant,
       mappingVersion: state.mappingVersion + 1,
     })),
 }));

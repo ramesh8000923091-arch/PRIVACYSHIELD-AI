@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Activity, ArrowRight, Download, ShieldCheck, Trash2 } from 'lucide-react';
 import {
@@ -19,6 +19,15 @@ export function HistoryPage() {
   const clearEntries = useAuditLogStore((state) => state.clearEntries);
   const [actionFilter, setActionFilter] = useState<AuditAction | 'ALL'>('ALL');
   const [exportedFile, setExportedFile] = useState<string | null>(null);
+  const exportTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (exportTimerRef.current !== null) {
+        window.clearTimeout(exportTimerRef.current);
+      }
+    };
+  }, []);
 
   const filtered = useMemo(
     () => (actionFilter === 'ALL' ? entries : entries.filter((e) => e.action === actionFilter)),
@@ -30,7 +39,13 @@ export function HistoryPage() {
   function handleExport() {
     const file = exportSafeAuditLogSummary(entries);
     setExportedFile(file);
-    window.setTimeout(() => setExportedFile(null), 3000);
+    if (exportTimerRef.current !== null) {
+      window.clearTimeout(exportTimerRef.current);
+    }
+    exportTimerRef.current = window.setTimeout(() => {
+      setExportedFile(null);
+      exportTimerRef.current = null;
+    }, 3000);
   }
 
   return (
@@ -59,6 +74,11 @@ export function HistoryPage() {
             size="sm"
             onClick={handleExport}
             disabled={entries.length === 0}
+            title={
+              entries.length === 0
+                ? 'No local activity recorded yet'
+                : 'Export metadata-only JSON summary'
+            }
           >
             <Download className="h-3.5 w-3.5" aria-hidden="true" />
             Export Safe Summary
@@ -69,6 +89,7 @@ export function HistoryPage() {
             size="sm"
             onClick={clearEntries}
             disabled={entries.length === 0}
+            title={entries.length === 0 ? 'History is already empty' : 'Clear local audit log'}
           >
             <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
             Clear History
@@ -76,21 +97,25 @@ export function HistoryPage() {
         </div>
       </div>
 
-      {exportedFile && (
-        <div
-          role="status"
-          className="mb-4 rounded-lg border border-status-verified/40 bg-status-verified/10 px-4 py-2.5 text-xs text-status-verified"
-        >
-          Exported sanitized audit summary as <code className="font-mono">{exportedFile}</code>.
-        </div>
-      )}
+      <div role="status" aria-live="polite">
+        {exportedFile && (
+          <div className="mb-4 rounded-lg border border-status-verified/40 bg-status-verified/10 px-4 py-2.5 text-xs text-status-verified">
+            Exported sanitized audit summary as <code className="font-mono">{exportedFile}</code>.
+          </div>
+        )}
+      </div>
 
       {uniqueActions.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-1.5">
+        <div
+          role="group"
+          aria-label="Filter activity by action"
+          className="mb-4 flex flex-wrap items-center gap-1.5"
+        >
           <button
             type="button"
+            aria-pressed={actionFilter === 'ALL'}
             onClick={() => setActionFilter('ALL')}
-            className={`rounded-full px-3 py-1 font-mono text-xs font-medium cursor-pointer ${
+            className={`cursor-pointer rounded-full px-3 py-1 font-mono text-xs font-medium ${
               actionFilter === 'ALL'
                 ? 'bg-brand-primary text-white'
                 : 'border border-border-default bg-bg-surface text-text-secondary'
@@ -102,8 +127,9 @@ export function HistoryPage() {
             <button
               key={action}
               type="button"
+              aria-pressed={actionFilter === action}
               onClick={() => setActionFilter(action)}
-              className={`rounded-full px-3 py-1 font-mono text-xs font-medium cursor-pointer ${
+              className={`cursor-pointer rounded-full px-3 py-1 font-mono text-xs font-medium ${
                 actionFilter === action
                   ? 'bg-brand-primary text-white'
                   : 'border border-border-default bg-bg-surface text-text-secondary'
@@ -137,53 +163,102 @@ export function HistoryPage() {
               </Button>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs sm:text-sm">
-                <thead>
-                  <tr className="border-b border-border-default font-mono text-[11px] uppercase tracking-wider text-text-muted">
-                    <th className="py-2.5 pr-4">Timestamp</th>
-                    <th className="py-2.5 pr-4">Action</th>
-                    <th className="py-2.5 pr-4">Mode</th>
-                    <th className="py-2.5 pr-4">Entities</th>
-                    <th className="py-2.5 pr-4">Status</th>
-                    <th className="py-2.5">Note</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border-subtle">
-                  {filtered.map((entry) => (
-                    <tr key={entry.id} className="hover:bg-bg-elevated/40">
-                      <td className="whitespace-nowrap py-3 pr-4 font-mono text-xs text-text-muted">
-                        {new Date(entry.timestamp).toLocaleString()}
-                      </td>
-                      <td className="whitespace-nowrap py-3 pr-4 font-mono text-xs font-semibold text-text-primary">
+            <>
+              {/* Mobile card layout */}
+              <div className="space-y-2.5 sm:hidden">
+                {filtered.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="rounded-lg border border-border-subtle bg-bg-elevated/40 p-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-mono text-xs font-semibold text-text-primary">
                         {entry.action}
-                      </td>
-                      <td className="whitespace-nowrap py-3 pr-4">
-                        {entry.redactionMode ? (
-                          <Badge variant="default" className="font-mono text-[10px]">
-                            {entry.redactionMode}
-                          </Badge>
-                        ) : (
-                          <span className="text-text-muted">—</span>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap py-3 pr-4 font-mono text-xs text-text-secondary">
-                        {typeof entry.detectedCount === 'number' ? entry.detectedCount : '—'}
-                      </td>
-                      <td className="whitespace-nowrap py-3 pr-4">
-                        <Badge
-                          variant={entry.status === 'SUCCESS' ? 'verified' : 'warning'}
-                          className="font-mono text-[10px]"
-                        >
-                          {entry.status}
+                      </span>
+                      <Badge
+                        variant={entry.status === 'SUCCESS' ? 'verified' : 'warning'}
+                        className="font-mono text-[10px]"
+                      >
+                        {entry.status}
+                      </Badge>
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2 font-mono text-[11px] text-text-muted">
+                      <span>{new Date(entry.timestamp).toLocaleString()}</span>
+                      {entry.redactionMode && (
+                        <Badge variant="default" className="font-mono text-[10px]">
+                          {entry.redactionMode}
                         </Badge>
-                      </td>
-                      <td className="py-3 text-xs text-text-muted">{entry.note ?? '—'}</td>
+                      )}
+                      {typeof entry.detectedCount === 'number' && (
+                        <span>{entry.detectedCount} entities</span>
+                      )}
+                    </div>
+                    {entry.note && <p className="mt-1.5 text-xs text-text-muted">{entry.note}</p>}
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop/tablet table layout */}
+              <div className="hidden overflow-x-auto sm:block">
+                <table className="w-full text-left text-xs sm:text-sm">
+                  <thead>
+                    <tr className="border-b border-border-default font-mono text-[11px] uppercase tracking-wider text-text-muted">
+                      <th scope="col" className="py-2.5 pr-4">
+                        Timestamp
+                      </th>
+                      <th scope="col" className="py-2.5 pr-4">
+                        Action
+                      </th>
+                      <th scope="col" className="py-2.5 pr-4">
+                        Mode
+                      </th>
+                      <th scope="col" className="py-2.5 pr-4">
+                        Entities
+                      </th>
+                      <th scope="col" className="py-2.5 pr-4">
+                        Status
+                      </th>
+                      <th scope="col" className="py-2.5">
+                        Note
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-border-subtle">
+                    {filtered.map((entry) => (
+                      <tr key={entry.id} className="hover:bg-bg-elevated/40">
+                        <td className="whitespace-nowrap py-3 pr-4 font-mono text-xs text-text-muted">
+                          {new Date(entry.timestamp).toLocaleString()}
+                        </td>
+                        <td className="whitespace-nowrap py-3 pr-4 font-mono text-xs font-semibold text-text-primary">
+                          {entry.action}
+                        </td>
+                        <td className="whitespace-nowrap py-3 pr-4">
+                          {entry.redactionMode ? (
+                            <Badge variant="default" className="font-mono text-[10px]">
+                              {entry.redactionMode}
+                            </Badge>
+                          ) : (
+                            <span className="text-text-muted">—</span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap py-3 pr-4 font-mono text-xs text-text-secondary">
+                          {typeof entry.detectedCount === 'number' ? entry.detectedCount : '—'}
+                        </td>
+                        <td className="whitespace-nowrap py-3 pr-4">
+                          <Badge
+                            variant={entry.status === 'SUCCESS' ? 'verified' : 'warning'}
+                            className="font-mono text-[10px]"
+                          >
+                            {entry.status}
+                          </Badge>
+                        </td>
+                        <td className="py-3 text-xs text-text-muted">{entry.note ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

@@ -33,7 +33,7 @@ const PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
       {
         text: 'priya.sharma@example.com',
         piiType: 'EMAIL',
-        partial: 'pr**@example.com',
+        partial: 'pr****@example.com',
         pseudonym: 'USER_01',
       },
       { text: '\nCallback: ' },
@@ -68,7 +68,7 @@ const PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
       {
         text: 'priya.sharma@example.com',
         piiType: 'EMAIL',
-        partial: 'pr**@example.com',
+        partial: 'pr****@example.com',
         pseudonym: 'USER_01',
       },
       { text: '.' },
@@ -83,7 +83,7 @@ const PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
       {
         text: 'devops.audit@example.org',
         piiType: 'EMAIL',
-        partial: 'de**@example.org',
+        partial: 'de****@example.org',
         pseudonym: 'USER_01',
       },
       { text: '\nclient_ipv4=' },
@@ -118,7 +118,7 @@ const PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
       {
         text: 'rohan.verma@example.net',
         piiType: 'EMAIL',
-        partial: 'ro**@example.net',
+        partial: 'ro****@example.net',
         pseudonym: 'USER_01',
       },
       { text: ',' },
@@ -139,7 +139,7 @@ const PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
       {
         text: 'rohan.verma@example.net',
         piiType: 'EMAIL',
-        partial: 'ro**@example.net',
+        partial: 'ro****@example.net',
         pseudonym: 'USER_01',
       },
       { text: ',' },
@@ -159,6 +159,10 @@ const PREVIEW_SCENARIOS: readonly PreviewScenario[] = [
     ],
   },
 ];
+
+function isRedactionMode(value: string): value is RedactionMode {
+  return value === 'FULL_MASK' || value === 'PARTIAL_MASK' || value === 'PSEUDONYMIZE';
+}
 
 function getRedactedReplacement(segment: PreviewSegment, mode: RedactionMode): string {
   if (!segment.piiType) return segment.text;
@@ -233,10 +237,11 @@ export function InteractiveHeroPreview() {
               <button
                 key={item.id}
                 type="button"
+                aria-pressed={active}
                 onClick={() => setScenarioId(item.id)}
                 className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer ${
                   active
-                    ? 'bg-brand-primary/15 text-brand-primary ring-1 ring-brand-primary/40'
+                    ? 'bg-brand-primary/15 text-brand-primary dark:text-blue-400 ring-1 ring-brand-primary/40'
                     : 'text-text-muted hover:bg-bg-elevated hover:text-text-primary'
                 }`}
               >
@@ -248,7 +253,11 @@ export function InteractiveHeroPreview() {
 
         <Tabs
           value={mode}
-          onValueChange={(value) => setMode(value as RedactionMode)}
+          onValueChange={(value) => {
+            if (isRedactionMode(value)) {
+              setMode(value);
+            }
+          }}
           aria-label="Preview redaction mode"
         >
           <TabsList className="w-full sm:w-auto">
@@ -345,7 +354,12 @@ export function InteractiveHeroPreview() {
           })}
         </div>
 
-        <Button asChild variant="ghost" size="sm" className="h-7 px-2.5 text-xs text-brand-primary">
+        <Button
+          asChild
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2.5 text-xs text-brand-primary dark:text-blue-400"
+        >
           <Link to="/workspace">
             Try in Workspace
             <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  AlertCircle,
   CheckCircle2,
   Download,
   FileText,
@@ -45,6 +46,11 @@ import {
 } from '@/services/export';
 import { isSupabaseConfigured } from '@/services/supabase';
 import { useAuditLogStore, usePreferencesStore } from '@/store';
+import type { RedactionMode } from '@/types';
+
+function isRedactionMode(value: string): value is RedactionMode {
+  return value === 'FULL_MASK' || value === 'PARTIAL_MASK' || value === 'PSEUDONYMIZE';
+}
 
 export function WorkspacePage() {
   const [activeSection, setActiveSection] = useState<WorkspaceSection>('WORKSPACE');
@@ -86,14 +92,24 @@ export function WorkspacePage() {
 
   const countsByCategory = pipeline.analytics?.countsByCategory ?? createEmptyCategoryCounts();
 
-  function handleCopySanitized() {
-    if (!pipeline.sanitizedText) return;
-    navigator.clipboard?.writeText(pipeline.sanitizedText).catch(() => {});
-    pipeline.showToast('Sanitized output copied to clipboard.');
+  async function handleCopySanitized(): Promise<boolean> {
+    if (!pipeline.isOutputReady || !pipeline.sanitizedText) return false;
+    if (!navigator.clipboard?.writeText) {
+      pipeline.showToast('Clipboard API is unavailable in this browser context.', 'error');
+      return false;
+    }
+    try {
+      await navigator.clipboard.writeText(pipeline.sanitizedText);
+      pipeline.showToast('Sanitized output copied to clipboard.');
+      return true;
+    } catch {
+      pipeline.showToast('Unable to write to clipboard. Check browser permissions.', 'error');
+      return false;
+    }
   }
 
   function handleDownload(format: 'txt' | 'csv') {
-    if (!pipeline.sanitizedText) return;
+    if (!pipeline.isOutputReady || !pipeline.sanitizedText) return;
     const savedName = downloadSanitizedFile(
       pipeline.sanitizedText,
       format,
@@ -111,7 +127,7 @@ export function WorkspacePage() {
   }
 
   function handleDownloadPrivacyReport() {
-    if (!pipeline.analytics) return;
+    if (!pipeline.isOutputReady || !pipeline.analytics) return;
     const report = createSafePrivacyReport(pipeline.analytics, pipeline.redactionMode);
     const name = downloadJsonReport(report, 'privacyshield-privacy-report');
     addAuditEntry({
@@ -160,27 +176,81 @@ export function WorkspacePage() {
         </div>
       </div>
 
-      {/* Live Toast Feedback */}
-      {pipeline.toast && (
+      {/* Persistent Live Status Region for Toast Feedback */}
+      <div role="status" aria-live="polite">
+        {pipeline.toast && (
+          <div
+            className={`mb-4 flex items-center justify-between gap-2 rounded-xl border px-4 py-2.5 text-xs font-medium ${
+              pipeline.toast.tone === 'error'
+                ? 'border-status-danger/40 bg-status-danger/10 text-status-danger'
+                : pipeline.toast.tone === 'info'
+                  ? 'border-brand-primary/40 bg-brand-primary/10 text-brand-primary dark:text-blue-400'
+                  : 'border-status-verified/40 bg-status-verified/10 text-status-verified'
+            }`}
+          >
+            <span className="inline-flex items-center gap-2">
+              {pipeline.toast.tone === 'error' ? (
+                <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+              ) : pipeline.toast.tone === 'info' ? (
+                <Info className="h-4 w-4 shrink-0" aria-hidden="true" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+              )}
+              {pipeline.toast.text}
+            </span>
+            <button
+              type="button"
+              onClick={pipeline.dismissToast}
+              aria-label="Dismiss notification"
+              className="rounded p-0.5 opacity-80 transition-opacity hover:opacity-100 cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Workspace-wide Error / Warning Banner (visible across Paste and Upload tabs) */}
+      {pipeline.errorMessage && (
         <div
-          role="status"
-          aria-live="polite"
-          className={`mb-4 flex items-center justify-between gap-2 rounded-xl border px-4 py-2.5 text-xs font-medium ${
-            pipeline.toast.tone === 'error'
-              ? 'border-status-danger/40 bg-status-danger/10 text-status-danger'
-              : pipeline.toast.tone === 'info'
-                ? 'border-brand-primary/40 bg-brand-primary/10 text-brand-primary'
-                : 'border-status-verified/40 bg-status-verified/10 text-status-verified'
-          }`}
+          role="alert"
+          className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-status-danger/40 bg-status-danger/10 px-4 py-3 text-xs text-status-danger"
         >
-          <span className="inline-flex items-center gap-2">
-            {pipeline.toast.tone === 'info' ? (
-              <Info className="h-4 w-4 shrink-0" aria-hidden="true" />
-            ) : (
-              <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
-            )}
-            {pipeline.toast.text}
+          <span className="inline-flex items-start gap-2">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>{pipeline.errorMessage}</span>
           </span>
+          <button
+            type="button"
+            onClick={() => pipeline.setErrorMessage(null)}
+            aria-label="Dismiss error alert"
+            className="rounded p-0.5 opacity-80 transition-opacity hover:opacity-100 cursor-pointer"
+          >
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
+      {/* Inline Scanning Progress Bar */}
+      {pipeline.isProcessing && (
+        <div
+          role="progressbar"
+          aria-label="Local PII scan progress"
+          aria-valuenow={pipeline.progressPercent}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          className="mb-4 rounded-xl border border-brand-primary/30 bg-bg-surface px-4 py-2.5"
+        >
+          <div className="mb-1.5 flex items-center justify-between font-mono text-[11px] text-text-secondary">
+            <span>Scanning document locally in browser memory...</span>
+            <span>{pipeline.progressPercent}%</span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-bg-elevated">
+            <div
+              className="h-full rounded-full bg-brand-primary transition-[width] duration-150"
+              style={{ width: `${Math.max(8, pipeline.progressPercent)}%` }}
+            />
+          </div>
         </div>
       )}
 
@@ -199,18 +269,22 @@ export function WorkspacePage() {
             <>
               {/* Input Card (Paste Text | Upload .txt / .csv) */}
               <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                    <div>
-                      <CardTitle>1. Document Input</CardTitle>
-                      <CardDescription>
-                        Choose direct paste or local .txt / .csv file upload
-                      </CardDescription>
-                    </div>
-                    <Tabs
-                      value={inputTab}
-                      onValueChange={(v) => setInputTab(v as 'PASTE' | 'UPLOAD')}
-                    >
+                <Tabs
+                  value={inputTab}
+                  onValueChange={(v) => {
+                    if (v === 'PASTE' || v === 'UPLOAD') {
+                      setInputTab(v);
+                    }
+                  }}
+                >
+                  <CardHeader className="pb-3">
+                    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                      <div>
+                        <CardTitle>1. Document Input</CardTitle>
+                        <CardDescription>
+                          Choose direct paste or local .txt / .csv file upload
+                        </CardDescription>
+                      </div>
                       <TabsList>
                         <TabsTrigger value="PASTE">
                           <FileText className="h-3.5 w-3.5" aria-hidden="true" />
@@ -221,17 +295,15 @@ export function WorkspacePage() {
                           Upload File
                         </TabsTrigger>
                       </TabsList>
-                    </Tabs>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <Tabs value={inputTab}>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
                     <TabsContent value="PASTE" className="mt-0">
                       <TextInputEditor
                         value={pipeline.rawText}
+                        inputSource={pipeline.inputSource}
                         isProcessing={pipeline.isProcessing}
                         onChange={(next) => {
-                          pipeline.setUploadedFile(null, null);
                           pipeline.setRawText(next, 'PASTE');
                         }}
                         onRunDetection={pipeline.runManualScan}
@@ -246,13 +318,12 @@ export function WorkspacePage() {
                         parsedCsv={pipeline.parsedCsv}
                         isProcessing={pipeline.isProcessing}
                         progressPercent={pipeline.progressPercent}
-                        errorMessage={pipeline.errorMessage}
                         onFileSelect={pipeline.handleFileUpload}
                         onRemoveFile={pipeline.handleClearWorkspace}
                       />
                     </TabsContent>
-                  </Tabs>
-                </CardContent>
+                  </CardContent>
+                </Tabs>
               </Card>
 
               {/* Category Toggles & Live Highlighting */}
@@ -291,7 +362,7 @@ export function WorkspacePage() {
                       <button
                         type="button"
                         onClick={() => setActiveSection('RESULTS')}
-                        className="font-semibold text-brand-primary underline cursor-pointer"
+                        className="cursor-pointer font-semibold text-brand-primary underline dark:text-blue-400"
                       >
                         Detection Results
                       </button>{' '}
@@ -306,7 +377,8 @@ export function WorkspacePage() {
                 mode={pipeline.redactionMode}
                 fullMaskVariant={pipeline.fullMaskVariant}
                 mappingCount={pipeline.mappingCount}
-                hasSanitizedOutput={Boolean(pipeline.sanitizedText)}
+                isOutputReady={pipeline.isOutputReady}
+                isProcessing={pipeline.isProcessing}
                 parsedCsv={pipeline.parsedCsv}
                 onModeChange={pipeline.handleModeChange}
                 onFullMaskVariantChange={pipeline.setFullMaskVariant}
@@ -315,6 +387,7 @@ export function WorkspacePage() {
                 onDownloadTxt={() => handleDownload('txt')}
                 onDownloadCsv={() => handleDownload('csv')}
                 onDownloadReport={handleDownloadPrivacyReport}
+                onRestoreAiResponse={pipeline.restoreAiResponse}
               />
 
               {/* Side-by-Side Diff Viewer */}
@@ -326,6 +399,8 @@ export function WorkspacePage() {
                 excludedCount={pipeline.analytics?.totalExcluded ?? 0}
                 parsedCsv={pipeline.parsedCsv}
                 sanitizedCsvRows={pipeline.sanitizedCsvRows}
+                redactedCellKeys={pipeline.redactedCellKeys}
+                excludedCellKeys={pipeline.excludedCellKeys}
               />
 
               {/* Compact Analytics Preview below Diff when data exists */}
@@ -387,6 +462,11 @@ export function WorkspacePage() {
                       size="sm"
                       onClick={handleExportAuditSummary}
                       disabled={auditEntries.length === 0}
+                      title={
+                        auditEntries.length === 0
+                          ? 'No local activity recorded yet'
+                          : 'Export metadata-only JSON summary'
+                      }
                     >
                       <Download className="h-3.5 w-3.5" aria-hidden="true" />
                       Export JSON
@@ -397,6 +477,11 @@ export function WorkspacePage() {
                       size="sm"
                       onClick={clearAuditEntries}
                       disabled={auditEntries.length === 0}
+                      title={
+                        auditEntries.length === 0
+                          ? 'Activity log is already empty'
+                          : 'Clear local activity history'
+                      }
                     >
                       <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                       Clear History
@@ -459,15 +544,16 @@ export function WorkspacePage() {
               </CardHeader>
               <CardContent className="space-y-5">
                 <div className="flex items-center justify-between gap-4 rounded-lg border border-border-subtle bg-bg-elevated/40 p-4">
-                  <div>
+                  <label htmlFor="settings-dark-theme" className="cursor-pointer">
                     <p className="text-sm font-medium text-text-primary">
                       Dark Cybersecurity Theme
                     </p>
                     <p className="text-xs text-text-muted">
                       Switch between dark navy and crisp light workspace appearance.
                     </p>
-                  </div>
+                  </label>
                   <Switch
+                    id="settings-dark-theme"
                     checked={theme === 'dark'}
                     onCheckedChange={toggleTheme}
                     aria-label="Toggle dark theme"
@@ -484,9 +570,10 @@ export function WorkspacePage() {
                   <Tabs
                     value={defaultRedactionMode}
                     onValueChange={(value) => {
-                      const nextMode = value as typeof defaultRedactionMode;
-                      setDefaultRedactionMode(nextMode);
-                      pipeline.handleModeChange(nextMode);
+                      if (isRedactionMode(value)) {
+                        setDefaultRedactionMode(value);
+                        pipeline.handleModeChange(value);
+                      }
                     }}
                   >
                     <TabsList>
@@ -498,7 +585,7 @@ export function WorkspacePage() {
                 </div>
 
                 <div className="flex items-center justify-between gap-4 rounded-lg border border-border-subtle bg-bg-elevated/40 p-4">
-                  <div>
+                  <label htmlFor="settings-retain-mappings" className="cursor-pointer">
                     <p className="text-sm font-medium text-text-primary">
                       Retain Pseudonym Mappings Across Documents (RAM Opt-In)
                     </p>
@@ -506,8 +593,9 @@ export function WorkspacePage() {
                       Disabled by default so each new document resets tokens cleanly. Still strictly
                       volatile RAM only.
                     </p>
-                  </div>
+                  </label>
                   <Switch
+                    id="settings-retain-mappings"
                     checked={retainMappingsAcrossDocuments}
                     onCheckedChange={setRetainMappingsAcrossDocuments}
                     aria-label="Retain pseudonym mappings across documents in RAM"
@@ -515,7 +603,7 @@ export function WorkspacePage() {
                 </div>
 
                 <div className="flex items-center justify-between gap-4 rounded-lg border border-border-subtle bg-bg-elevated/40 p-4">
-                  <div>
+                  <label htmlFor="settings-telemetry-consent" className="cursor-pointer">
                     <p className="text-sm font-medium text-text-primary">
                       Opt-In Anonymous Aggregate Statistics (Supabase Only)
                     </p>
@@ -524,8 +612,9 @@ export function WorkspacePage() {
                         ? 'Sends non-sensitive integer counts only when enabled.'
                         : 'Local-Only Mode active — Supabase credentials are not configured.'}
                     </p>
-                  </div>
+                  </label>
                   <Switch
+                    id="settings-telemetry-consent"
                     checked={telemetryConsent}
                     onCheckedChange={setTelemetryConsent}
                     disabled={!isSupabaseConfigured}
@@ -541,10 +630,12 @@ export function WorkspacePage() {
                     {PII_CATEGORY_LIST.map((cat) => (
                       <label
                         key={cat.type}
-                        className="flex items-center justify-between rounded-md border border-border-subtle px-3 py-2 text-xs cursor-pointer"
+                        htmlFor={`settings-cat-${cat.type}`}
+                        className="flex cursor-pointer items-center justify-between rounded-md border border-border-subtle px-3 py-2 text-xs"
                       >
                         <span className="font-medium text-text-primary">{cat.label}</span>
                         <Switch
+                          id={`settings-cat-${cat.type}`}
                           checked={enabledCategories[cat.type]}
                           onCheckedChange={() => toggleCategory(cat.type)}
                           aria-label={`Enable ${cat.label} detector`}

@@ -40,7 +40,6 @@ export default defineConfig({
           }
           if (id.includes('framer-motion')) return 'motion-vendor';
           if (id.includes('recharts')) return 'charts-vendor';
-          if (id.includes('@supabase')) return 'supabase-vendor';
           return undefined;
         },
       },

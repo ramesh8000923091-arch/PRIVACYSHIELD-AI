@@ -1,6 +1,6 @@
 # PrivacyShield AI — System Architecture & Engineering Specification
 
-> **Document Status:** Phase 1 Deliverable (Architecture & Planning)  
+> **Document Status:** Implemented & Production-Hardened Specification  
 > **Project:** PrivacyShield AI — Client-Side PII Detection, Classification & Data Sanitization Platform  
 > **Core Guarantee:** 100% Client-Side PII Processing — raw documents, uploaded files, detected values, and pseudonymization mappings never leave the browser.
 
@@ -100,13 +100,13 @@ privacyshield-ai/
 │   │   ├── assets/
 │   │   │
 │   │   ├── components/
-│   │   │   ├── common/          # PrivacyBadge, ThemeToggle, ConfirmDialog, EmptyState, WalkthroughModal
-│   │   │   ├── layout/          # Navbar, Footer, WorkspaceShell, WorkspaceSidebar
-│   │   │   ├── editor/          # TextInputEditor, FileUploadZone, CsvPreviewTable, SampleDataButton
-│   │   │   ├── detection/       # HighlightedTextView, EntityInspectorPopover, CategoryLegend, CategoryFilterBar
-│   │   │   ├── redaction/       # RedactionModeSelector, SideBySideDiff, PseudonymControls, ExportControls
-│   │   │   ├── analytics/       # AnalyticsSummaryCards, CategoryDistributionChart, BeforeAfterStats, PrivacyReportModal
-│   │   │   └── ui/              # shadcn/ui primitives (Button, Card, Tabs, Badge, Switch, Dialog, Tooltip, Toast)
+│   │   │   ├── common/          # ErrorBoundary, PrivacyBadge, ThemeToggle, InteractiveHeroPreview, PrivacyArchitectureSection, RedactionModesShowcase, FaqAccordion, SectionHeader
+│   │   │   ├── layout/          # AppShell, Navbar, Footer, WorkspaceSidebar
+│   │   │   ├── editor/          # TextInputEditor, FileUploadZone
+│   │   │   ├── detection/       # HighlightedTextView, CategoryControlsBar, DetectionResultsTable
+│   │   │   ├── redaction/       # RedactionControlsBar (incl. Restore AI Reply), SideBySideDiffView
+│   │   │   ├── analytics/       # AnalyticsDashboard
+│   │   │   └── ui/              # shadcn/ui primitives (Button, Card, Tabs, Badge, Switch)
 │   │   │
 │   │   ├── pages/
 │   │   │   ├── HomePage.tsx
@@ -115,7 +115,7 @@ privacyshield-ai/
 │   │   │   ├── AboutPage.tsx
 │   │   │   └── NotFoundPage.tsx
 │   │   │
-│   │   ├── hooks/               # useDetectionRunner, useKeyboardShortcuts, useSyncScroll, useTheme, useSupabaseAuth
+│   │   ├── hooks/               # useSanitizationPipeline.ts, useTheme.ts
 │   │   ├── store/               # useWorkspaceStore.ts, usePreferencesStore.ts, useAuditLogStore.ts
 │   │   │
 │   │   ├── services/
