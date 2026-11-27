@@ -158,12 +158,20 @@ describe('Phase 8 — CSV Cell Sanitization, File Validation & Safe Export', () 
     );
   });
 
-  it('detects semicolon and tab delimiters reliably even on 2-row CSVs with trailing newline', () => {
-    const semiCsv = 'id;email;phone\n1;priya@example.com;9876543210\n';
+  it('detects semicolon and tab delimiters reliably even on 2-row CSVs with trailing newline and quoted commas', () => {
+    const semiCsv =
+      'id;name;email;formula;balance\n1;"Sharma, Priya";priya@example.com;"=HYPERLINK(""https://evil.example"",""Click"")";-42.5\n';
     const semiParsed = parseCsvContent(semiCsv, 'semi.csv', semiCsv.length);
     expect(semiParsed.document.delimiter).toBe(';');
-    expect(semiParsed.document.headers).toEqual(['id', 'email', 'phone']);
-    expect(semiParsed.document.rows[1]).toEqual(['1', 'priya@example.com', '9876543210']);
+    expect(semiParsed.warnings).toEqual([]);
+    expect(semiParsed.document.headers).toEqual(['id', 'name', 'email', 'formula', 'balance']);
+    expect(semiParsed.document.rows[1]).toEqual([
+      '1',
+      'Sharma, Priya',
+      'priya@example.com',
+      '=HYPERLINK("https://evil.example","Click")',
+      '-42.5',
+    ]);
 
     const tabCsv = 'id\temail\n1\tpriya@example.com\n';
     const tabParsed = parseCsvContent(tabCsv, 'tab.csv', tabCsv.length);

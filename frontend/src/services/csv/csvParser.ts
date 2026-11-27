@@ -70,7 +70,11 @@ export function parseCsvContent(
     dynamicTyping: false,
   });
 
-  if (parsed.errors.some((e) => e.code === 'UndetectableDelimiter')) {
+  const shouldRetryDelimiter =
+    parsed.errors.some((e) => e.code === 'UndetectableDelimiter') ||
+    (parsed.meta.delimiter === ',' && (parsed.data[0]?.length ?? 0) <= 1);
+
+  if (shouldRetryDelimiter) {
     const guessed = guessDelimiterFromNonEmptyLines(rawText);
     if (guessed) {
       parsed = Papa.parse<string[]>(rawText, {
